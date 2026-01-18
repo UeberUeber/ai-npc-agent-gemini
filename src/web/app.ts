@@ -117,7 +117,7 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = type === 'user' ? '🧑' : type === 'npc' ? '🔨' : '⚙️';
+  avatar.textContent = type === 'user' ? '🦸' : type === 'npc' ? '🔨' : '⚙️';
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
@@ -257,7 +257,9 @@ function renderImportance(memory: { type: string; importance?: number }): string
         <div class="section-title">🔍 메모리 검색 시 활용</div>
         <div class="section-content">
           <code>score = recency + importance + relevance</code><br>
-          중요도가 높을수록 대화에서 더 잘 떠올립니다.
+          • recency: 최근 접근한 기억일수록 높음<br>
+          • importance: LLM이 평가한 중요도 (1-10)<br>
+          • relevance: 현재 대화와 관련될수록 높음
         </div>
       </div>
 
@@ -373,7 +375,7 @@ function updateTileInfoUI(tileInfo: TileInfo) {
   `;
 
   if (tileInfo.isPlayerHere) {
-    content += `<div class="tile-info-item player">🧑 용사 스마게</div>`;
+    content += `<div class="tile-info-item player">🦸 용사 스마게</div>`;
   }
 
   if (tileInfo.npc) {
