@@ -3,7 +3,7 @@
 Google Gemini API를 활용한 RPG/판타지 세계관 NPC 에이전트 시스템입니다.
 [Generative Agents (Stanford, 2023)](https://arxiv.org/abs/2304.03442) 논문의 아키텍처를 참고하여 구현했습니다.
 
-## Demo
+## 실행 방법
 
 브라우저에서 직접 실행: API 키 입력 후 NPC와 대화할 수 있습니다.
 
@@ -12,7 +12,9 @@ npm install
 npm run dev
 ```
 
-## Features
+브라우저에서 `http://localhost:3000` 접속 → API 키 입력 → 대화 시작
+
+## 주요 기능
 
 | 기능 | 설명 |
 |------|------|
@@ -21,6 +23,7 @@ npm run dev
 | **Memory Stream** | 대화/관찰/감정변화를 시간순으로 localStorage에 저장 |
 | **Retrieval** | Recency + Importance + Relevance 점수로 관련 기억 검색 |
 | **Reflection** | 10회 대화마다 LLM으로 중요도 재평가 후 상위 수준 인사이트 생성 |
+| **Planning** | 목표 기반 하루 계획 생성 (Agent Summary + Yesterday's Activities) |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
 
 ## Architecture
@@ -66,29 +69,33 @@ npm run dev
 
 ```
 .
-├── index.html                 # 웹 UI (HTML + CSS 포함)
+├── .claude/
+│   └── rules/
+│       └── ui-modification.md    # UI/디자인 수정 룰 (Claude Code용)
+├── index.html                     # 웹 UI (HTML + CSS 포함)
 ├── src/
-│   ├── client/                # 브라우저용 코드
-│   │   ├── agent.ts          # NPCAgent 클래스 (핵심 로직)
-│   │   │                     # - chat(): 대화 + 감정 파싱 + 메모리 저장
-│   │   │                     # - greet(): 첫 인사 생성
-│   │   │                     # - triggerReflection(): 10회마다 성찰
-│   │   │                     # - buildPrompt(): 프롬프트 조합
-│   │   ├── gemini.ts         # Gemini API 클라이언트
-│   │   │                     # - API 키 localStorage 관리
-│   │   │                     # - generate(): 텍스트 생성
-│   │   ├── memory.ts         # MemoryStore (localStorage 기반)
-│   │   │                     # - add(): 메모리 추가
-│   │   │                     # - retrieve(): 관련 기억 검색
-│   │   │                     # - updateImportance(): 중요도 갱신
+│   ├── client/                    # 브라우저용 핵심 코드
+│   │   ├── agent.ts              # NPCAgent 클래스 (핵심 로직)
+│   │   │                         # - chat(): 대화 + 감정 파싱 + 메모리 저장
+│   │   │                         # - greet(): 첫 인사 생성
+│   │   │                         # - triggerReflection(): 10회마다 성찰
+│   │   │                         # - buildPrompt(): 프롬프트 조합
+│   │   ├── gemini.ts             # Gemini API 클라이언트
+│   │   │                         # - API 키 localStorage 관리
+│   │   │                         # - generate(): 텍스트 생성
+│   │   ├── memory.ts             # MemoryStore (localStorage 기반)
+│   │   │                         # - add(): 메모리 추가
+│   │   │                         # - retrieve(): 관련 기억 검색
+│   │   │                         # - updateImportance(): 중요도 갱신
 │   │   └── npcs/
-│   │       └── blacksmith.ts # 대장장이 NPC (Persona + Scratch)
+│   │       └── blacksmith_john.ts # 대장장이 NPC (Persona + Scratch)
 │   └── web/
-│       └── app.ts            # UI 컨트롤러
-│                             # - DOM 이벤트 핸들링
-│                             # - 시스템 로그 표시
-│                             # - 실시간 상태 UI 업데이트
-├── .env                       # 환경변수 (VITE_GEMINI_MODEL)
+│       └── app.ts                # UI 컨트롤러
+│                                 # - DOM 이벤트 핸들링
+│                                 # - 시스템 로그 표시
+│                                 # - 실시간 상태 UI 업데이트
+├── .env                           # 환경변수 (VITE_GEMINI_MODEL)
+├── vite.config.ts                 # Vite 설정
 └── package.json
 ```
 
@@ -116,11 +123,11 @@ interface Persona {
 interface Scratch {
   currentLocation: string;    // "대장간 내부, 모루 앞"
   currentActivity: string;    // "검 손잡이를 다듬는 중"
-  currentMood: MoodType;      // "neutral" → 대화에 따라 동적 변화!
+  currentMood: string;        // "neutral" → 대화에 따라 동적 변화!
   currentTime: string;        // "14:30"
 }
 
-// 감정 타입 (7가지)
+// 감정 타입 (7가지) - LLM 응답 파싱 시 사용
 type MoodType = 'happy' | 'neutral' | 'sad' | 'angry' | 'fearful' | 'excited' | 'curious';
 ```
 
@@ -236,7 +243,83 @@ async triggerReflection() {
 }
 ```
 
-### 7. Emotion System (감정 피드백 루프)
+### 7. Planning System (하루 계획 - 논문 기반)
+
+NPC는 매일 아침(06:00) **목표 기반 하루 계획**을 생성합니다.
+
+#### 입력 데이터 (논문 기반)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Planning 입력 데이터                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   1. Agent Summary              2. Yesterday's Activities            │
+│   ─────────────────            ────────────────────────             │
+│   • 이름, 나이, 직업            • 어제의 plan 타입 메모리            │
+│   • 성격 특성                   • 어제 하루 완료 기록                 │
+│   • **현재 목표** ← 핵심!       • 연속성 확보                        │
+│   • 배경 스토리                                                      │
+│                                                                      │
+│   3. 목표 관련 기억                                                   │
+│   ──────────────────                                                 │
+│   • currentGoals 키워드로 메모리 검색                                │
+│   • 목표 진행 상황 파악                                              │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### 목표 → 계획 연결
+
+```typescript
+// DailyPlanItem 인터페이스
+interface DailyPlanItem {
+  time: string;           // "06:00", "14:00"
+  activity: string;       // "철광석 상인 찾아보기"
+  location?: string;      // "마을 시장"
+  duration: number;       // 분 단위
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  goalRelated?: boolean;  // 🎯 목표와 연관된 활동
+}
+```
+
+#### 계획 생성 흐름
+
+```
+06:00 기상
+    ↓
+wakeUp() 호출
+    ↓
+┌─────────────────────────────────────┐
+│ 1. generateAgentSummary()           │
+│    → 페르소나 + 목표 구조화         │
+│                                     │
+│ 2. getYesterdayActivities()         │
+│    → 어제 활동 기록 검색            │
+│                                     │
+│ 3. 목표 키워드로 메모리 검색        │
+│    → retrieve(goalKeywords, 5)      │
+└─────────────────────────────────────┘
+    ↓
+LLM에게 계획 생성 요청
+"목표 달성을 위한 활동을 최소 1-2개 포함하세요"
+    ↓
+계획 JSON 파싱 + 메모리에 저장
+    ↓
+시간별 자동 활동 변경 (updatePlanProgress)
+    ↓
+22:00 취침 → 하루 완료율 기록
+```
+
+#### UI 표시
+
+- 🎯 : 목표 관련 활동 (보라색 테두리)
+- ▶️ : 현재 진행 중 (노란색 강조)
+- ✅ : 완료
+- ⏭️ : 스킵됨
+- ⏳ : 대기 중
+
+### 8. Emotion System (감정 피드백 루프)
 
 ```typescript
 // LLM 응답 형식 (JSON)
@@ -314,10 +397,11 @@ type Intent = 'sell' | 'help' | 'refuse' | 'inquire' | 'share_story' | 'warn' | 
 
 ```bash
 # .env
-VITE_GEMINI_MODEL=gemini-3-flash-preview
+VITE_GEMINI_MODEL=gemini-2.0-flash-001
 ```
 
-API 키는 사용자가 브라우저에서 직접 입력 → localStorage에 저장됩니다.
+- `VITE_GEMINI_MODEL`: 사용할 Gemini 모델 (기본값: `gemini-2.0-flash-001`)
+- API 키는 사용자가 브라우저에서 직접 입력 → localStorage에 저장됩니다.
 
 ## Usage
 
@@ -326,6 +410,7 @@ API 키는 사용자가 브라우저에서 직접 입력 → localStorage에 저
 ```bash
 npm install
 npm run dev
+# → http://localhost:3000 에서 실행
 ```
 
 ### 2. API 키 입력
@@ -352,7 +437,7 @@ npm run dev
 ### 새 NPC 추가
 
 ```typescript
-// src/client/npcs/merchant.ts
+// src/client/npcs/merchant_anna.ts
 import { Persona, Scratch } from '../agent';
 
 export const merchantPersona: Persona = {
@@ -378,7 +463,8 @@ export const merchantScratch: Scratch = {
 ### app.ts에서 NPC 교체
 
 ```typescript
-import { merchantPersona, merchantScratch } from '../client/npcs/merchant';
+// src/web/app.ts
+import { merchantPersona, merchantScratch } from '../client/npcs/merchant_anna';
 
 agent = new NPCAgent(merchantPersona, merchantScratch);
 ```
@@ -396,6 +482,51 @@ count(): number
 updateImportance(id: string, importance: number): void
 clear(): void
 ```
+
+## Changelog
+
+### 2025-01-18 (인물 탭 시스템)
+- **인물 탭 UI 추가**: 오른쪽 패널을 "인물" 탭으로 변경
+  - 👨‍🔧 대장장이 존 / 🦸 영웅 스마게 탭 전환
+  - 각 캐릭터별 페르소나, 환경/상태 정보 표시
+  - NPC 탭: 기존 정보 (계획, 히스토리, 메모리, 로그)
+  - 플레이어 탭: 페르소나 + 환경/상태 (소지금 포함)
+
+### 2025-01-18 (Planning 시스템)
+- **Planning 시스템 구현** (Generative Agents 논문 기반)
+  - `wakeUp()` / `sleep()`: 기상/취침 라이프사이클
+  - `generateDailyPlan()`: 목표 기반 하루 계획 생성
+  - `updatePlanProgress()`: 시간별 자동 활동 변경
+  - Agent Summary + Yesterday's Activities 입력 구조화
+  - 목표 관련 활동 표시 (`goalRelated: true` + 🎯 아이콘)
+- **GameTime 시스템 추가**: 게임 내 시간 흐름 (실시간 1초 = 게임 5분)
+  - 시간대별 UI 업데이트 (새벽/오전/오후/저녁/밤)
+  - 06:00 자동 기상, 22:00 자동 취침
+
+### 2025-01-18
+- **Claude Code 룰 시스템 추가**: `.claude/rules/` 디렉토리로 작업 룰 관리
+  - `ui-modification.md`: UI/디자인 수정 시 필수 준수 사항
+  - 수정 범위 제한, 위치 키워드 해석, 요소 이동 체크리스트 등
+- **방향 화살표 표시**: 플레이어와 NPC 모두 바라보는 방향을 화살표(▲▼◀▶)로 표시
+  - 플레이어: 이동 방향 또는 시도한 방향으로 화살표 업데이트
+  - NPC: facing 속성에 따라 방향 표시
+- **상호작용 시스템 개선**: 상하좌우 인접만 상호작용 가능 (대각선 제외)
+  - `isAdjacent()`: 상하좌우 4방향만 인접으로 판단
+  - `getAdjacentObject()`: 플레이어가 바라보는 방향의 오브젝트 반환
+  - `getAdjacentObjects()`: 상하좌우 모든 인접 오브젝트 반환
+- **타일 정보 패널 추가**: 마을 지도 옆에 타일 클릭 시 정보 표시 패널 추가
+  - 클릭한 타일의 좌표, 타입, NPC 시야 여부 표시
+  - NPC/오브젝트/플레이어 정보 상세 표시
+  - 벽 타일의 시야 차단 여부 표시
+  - `getTileInfo()`: 타일의 모든 정보를 반환하는 메서드
+  - `onTileClick` 콜백: 타일 클릭 시 호출되는 이벤트 핸들러
+- **패널 리사이저 추가**: 3개 패널(마을/대화/NPC 정보) 사이에 드래그 가능한 리사이저 추가
+  - 마우스 드래그로 각 패널 너비 동적 조절 가능
+  - 최소 너비 200px 보장
+  - 호버/드래그 시 시각적 피드백 (파란색 강조)
+- **대화창 기본 폭 축소**: flex 1.2 → 0.8로 변경하여 더 컴팩트한 레이아웃
+- **NPC 시야 시스템 추가**: NPC의 시야 범위 시각화 (노란색 하이라이트)
+- **오브젝트 타일 추가**: 게임 월드에 상호작용 가능한 오브젝트 표시
 
 ## References
 

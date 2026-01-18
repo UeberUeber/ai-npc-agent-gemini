@@ -7,8 +7,10 @@
  */
 
 import { gemini } from '../client/gemini';
-import { NPCAgent } from '../client/agent';
-import { blacksmithPersona, blacksmithScratch } from '../client/npcs/blacksmith';
+import { NPCAgent, DailyPlanItem } from '../client/agent';
+import { blacksmithPersona, blacksmithScratch } from '../client/npcs/blacksmith_john';
+import { GameWorld, Entity, TileInfo } from '../client/game/world';
+import { GameTime, GameTimeState } from '../client/game/time';
 
 // DOM 요소
 const chatMessages = document.getElementById('chatMessages') as HTMLDivElement;
@@ -44,8 +46,32 @@ const apiKeySubmit = document.getElementById('apiKeySubmit') as HTMLButtonElemen
 const systemLog = document.getElementById('systemLog') as HTMLDivElement;
 const chatCounter = document.getElementById('chatCounter') as HTMLSpanElement;
 
+// 게임 월드 요소
+const gameGrid = document.getElementById('gameGrid') as HTMLDivElement;
+const gameStatus = document.getElementById('gameStatus') as HTMLDivElement;
+
+// 게임 시간 요소
+const gameDay = document.getElementById('gameDay') as HTMLSpanElement;
+const gameTimeDisplay = document.getElementById('gameTimeDisplay') as HTMLSpanElement;
+const gamePeriod = document.getElementById('gamePeriod') as HTMLSpanElement;
+
+// 계획 패널 요소
+const planSection = document.getElementById('planSection') as HTMLDivElement;
+const planDay = document.getElementById('planDay') as HTMLSpanElement;
+const planList = document.getElementById('planList') as HTMLDivElement;
+
+// 타일 정보 요소
+const tileInfoPanel = document.getElementById('tileInfo') as HTMLDivElement;
+
 // NPC Agent
 let agent: NPCAgent;
+
+// 게임 월드
+let gameWorld: GameWorld;
+let nearbyNpc: Entity | null = null;
+
+// 게임 시간
+let gameTime: GameTime;
 
 // 감정 상태 한글 변환
 const moodKorean: Record<string, string> = {
@@ -168,7 +194,7 @@ function updateHistoryUI() {
     .map(
       (msg) => `
       <div class="memory-item">
-        <div class="type">${msg.speaker === 'user' ? '손님' : agent.getName()}</div>
+        <div class="type">${msg.speaker === 'user' ? '용사 스마게' : agent.getName()}</div>
         <div>${msg.content}</div>
       </div>
     `
@@ -177,9 +203,9 @@ function updateHistoryUI() {
 }
 
 // 중요도 표시 생성 (미평가/평가완료 구분 + 툴팁)
-function renderImportance(memory: { type: string; importance: number }): string {
-  // observation 타입이고 importance가 5(기본값)이면 미평가
-  const isPending = memory.type === 'observation' && memory.importance === 5;
+function renderImportance(memory: { type: string; importance?: number }): string {
+  // importance가 undefined이면 미평가
+  const isPending = memory.importance === undefined;
   // reflection은 생성 시 importance 8로 설정되므로 항상 평가됨
 
   const statusClass = isPending ? 'pending' : 'evaluated';
@@ -203,7 +229,7 @@ function renderImportance(memory: { type: string; importance: number }): string 
         <div class="section-title">왜 즉시 평가하지 않나요?</div>
         <div class="section-content">
           메모리 저장마다 LLM API를 호출하면 <strong>비용 증가</strong>와 <strong>응답 지연</strong>이 발생합니다.
-          대신 기본값 <code>5</code>로 저장 후 일괄 평가하여 효율성을 높였습니다.
+          대신 중요도 판단 없이 저장 후, 대화 10개가 쌓이면 일괄 평가합니다.
         </div>
       </div>
 
@@ -265,6 +291,122 @@ function updateMemoryUI() {
     .join('');
 }
 
+// 계획 패널 UI 업데이트
+function updatePlanUI(day: number = 1) {
+  const plan = agent.getDailyPlan();
+
+  if (!plan || plan.length === 0) {
+    planSection.style.display = 'none';
+    return;
+  }
+
+  planSection.style.display = 'block';
+  planDay.textContent = `${day}일차`;
+
+  const statusIcon = (status: DailyPlanItem['status']): string => {
+    switch (status) {
+      case 'completed': return '✅';
+      case 'in_progress': return '▶️';
+      case 'skipped': return '⏭️';
+      default: return '⏳';
+    }
+  };
+
+  planList.innerHTML = plan
+    .map(
+      (item) => `
+      <div class="plan-item ${item.status}${item.goalRelated ? ' goal-related' : ''}">
+        <span class="plan-status">${statusIcon(item.status)}</span>
+        <span class="plan-time">${item.time}</span>
+        <span class="plan-activity">${item.activity}${item.goalRelated ? ' 🎯' : ''}</span>
+        ${item.location ? `<span class="plan-location">${item.location}</span>` : ''}
+      </div>
+    `
+    )
+    .join('');
+
+  // 현재 진행 중인 항목으로 스크롤
+  const inProgressItem = planList.querySelector('.plan-item.in_progress');
+  if (inProgressItem) {
+    inProgressItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// 게임 시간 UI 업데이트
+function updateGameTimeUI(state: GameTimeState) {
+  gameDay.textContent = `${state.day}일차`;
+  gameTimeDisplay.textContent = state.formatted;
+  gamePeriod.textContent = state.periodKorean;
+
+  // NPC의 Scratch에 현재 시간 반영
+  if (agent) {
+    agent.updateScratch({ currentTime: state.formatted });
+    updateScratchUI();
+  }
+}
+
+// 타일 정보 UI 업데이트
+function updateTileInfoUI(tileInfo: TileInfo) {
+  const typeLabels: Record<string, string> = {
+    empty: '빈 타일',
+    blocked: '장애물',
+    npc: 'NPC',
+    object: '오브젝트',
+    player: '플레이어',
+  };
+
+  const visionStatus = tileInfo.isInNpcVision ? '👁️ NPC 시야 내' : '🔒 시야 밖';
+
+  let content = `
+    <div class="tile-info-header">
+      <span class="tile-coords">(${tileInfo.position.x}, ${tileInfo.position.y})</span>
+      <span class="tile-type">${typeLabels[tileInfo.type] || tileInfo.type}</span>
+    </div>
+    <div class="tile-info-vision">${visionStatus}</div>
+  `;
+
+  if (tileInfo.isPlayerHere) {
+    content += `<div class="tile-info-item player">🧑 용사 스마게</div>`;
+  }
+
+  if (tileInfo.npc) {
+    content += `
+      <div class="tile-info-item npc">
+        <span class="emoji">${tileInfo.npc.emoji}</span>
+        <span class="name">${tileInfo.npc.name}</span>
+        <span class="facing">방향: ${tileInfo.npc.facing || '없음'}</span>
+      </div>
+    `;
+  }
+
+  if (tileInfo.object) {
+    content += `
+      <div class="tile-info-item object">
+        <span class="emoji">${tileInfo.object.emoji}</span>
+        <span class="name">${tileInfo.object.name}</span>
+        <span class="state">상태: ${tileInfo.object.state || '없음'}</span>
+        ${tileInfo.object.description ? `<span class="desc">${tileInfo.object.description}</span>` : ''}
+      </div>
+    `;
+  }
+
+  if (tileInfo.blocked) {
+    content += `
+      <div class="tile-info-item blocked">
+        <span class="emoji">🧱</span>
+        <span class="name">${tileInfo.blocked.label || '벽'}</span>
+        <span class="vision">${tileInfo.blocked.blocksVision ? '시야 차단' : '시야 통과'}</span>
+      </div>
+    `;
+  }
+
+  if (tileInfo.isEmpty && !tileInfo.isPlayerHere) {
+    content += `<div class="tile-info-empty">이동 가능한 빈 공간</div>`;
+  }
+
+  tileInfoPanel.innerHTML = content;
+}
+
 // 전체 UI 업데이트
 function updateAllUI() {
   updatePersonaUI();
@@ -278,11 +420,17 @@ async function sendMessage() {
   const message = userInput.value.trim();
   if (!message) return;
 
+  // NPC 근처가 아니면 메시지 전송 불가
+  if (!nearbyNpc) {
+    addMessage('system', 'NPC 근처로 이동해야 대화할 수 있습니다.', '시스템');
+    return;
+  }
+
   userInput.disabled = true;
   sendButton.disabled = true;
   userInput.value = '';
 
-  addMessage('user', message, '나');
+  addMessage('user', message, '용사 스마게');
   showTypingIndicator();
 
   try {
@@ -340,6 +488,203 @@ function submitApiKey() {
   initChat();
 }
 
+// NPC 기상 (하루 시작)
+async function npcWakeUp(day: number) {
+  addLog('☀️ NPC 기상 중...', 'info');
+
+  // 침대 상태 변경
+  gameWorld.updateObjectState('bed_john', '비어있음');
+
+  // 대장간 위치 (3,3)으로 이동
+  const smithyPosition = { x: 3, y: 3 };
+  gameWorld.moveNpcTo('blacksmith_john', smithyPosition, () => {
+    addLog('🔨 대장간 도착, 업무 시작', 'info');
+  });
+
+  try {
+    const plan = await agent.wakeUp('06:00');
+    updatePlanUI(day);
+    updateScratchUI();
+    updateMemoryUI();
+    addLog(`📋 ${plan.length}개의 일정 생성됨`, 'success');
+  } catch (error) {
+    console.error('NPC 기상 오류:', error);
+    addLog('⚠️ 계획 생성 실패', 'warning');
+  }
+}
+
+// NPC 취침 (하루 종료)
+async function npcSleep() {
+  addLog('🌙 NPC 취침 중... 침대로 이동', 'info');
+
+  // 침대 옆 위치 (8,2)로 이동 - 침대(7,2)는 blocksMovement
+  const bedSidePosition = { x: 8, y: 2 };
+
+  gameWorld.moveNpcTo('blacksmith_john', bedSidePosition, async () => {
+    addLog('🛏️ 침대 도착, 취침 시작', 'info');
+
+    // 침대 상태 변경
+    gameWorld.updateObjectState('bed_john', '존이 자는 중');
+
+    try {
+      await agent.sleep();
+      updatePlanUI();
+      updateScratchUI();
+      updateMemoryUI();
+    } catch (error) {
+      console.error('NPC 취침 오류:', error);
+    }
+  });
+}
+
+// 게임 시간 초기화
+function initGameTime() {
+  gameTime = new GameTime({
+    startDay: 1,
+    startHour: 6, // 새벽 6시 시작
+    startMinute: 0,
+    timeScale: 5, // 실시간 1초 = 게임 5분
+    onTimeChange: (state) => {
+      updateGameTimeUI(state);
+
+      // 계획 진행 상황 업데이트
+      if (agent) {
+        const result = agent.updatePlanProgress(state.formatted24);
+        if (result.changed && result.newActivity) {
+          addLog(`📍 활동 변경: ${result.newActivity.activity}`, 'info');
+          updatePlanUI(state.day);
+          updateScratchUI();
+        }
+      }
+    },
+    onPeriodChange: (_period, state) => {
+      addLog(`시간대 변경: ${state.periodKorean}`, 'info');
+
+      // 22:00 취침, 06:00 기상 체크
+      const hour = state.hour;
+      if (hour === 22 && agent) {
+        npcSleep();
+      }
+    },
+    onDayChange: (day, _state) => {
+      addLog(`🌅 ${day}일차 시작!`, 'success');
+      // 새 날 시작 시 NPC 기상
+      if (agent) {
+        npcWakeUp(day);
+      }
+    },
+  });
+
+  // 초기 UI 업데이트
+  updateGameTimeUI(gameTime.getState());
+
+  // 시간 흐름 시작
+  gameTime.start();
+  addLog('게임 시간 시작 (1초 = 5분)', 'info');
+}
+
+// 게임 월드 초기화
+function initGameWorld() {
+  // 게임 시간 먼저 초기화
+  initGameTime();
+
+  gameWorld = new GameWorld(gameGrid, gameStatus, {
+    gridSize: 10,
+    onPlayerMove: (_position, npc) => {
+      nearbyNpc = npc;
+      // 입력 필드 placeholder 업데이트
+      if (npc) {
+        userInput.placeholder = `${npc.name}에게 말하기... (근처에 있음!)`;
+      } else {
+        userInput.placeholder = 'NPC 근처로 이동하세요...';
+      }
+    },
+    onNpcInteract: (npc) => {
+      // Enter/Space로 상호작용 시 입력 필드에 포커스
+      if (npc) {
+        userInput.focus();
+        addLog(`${npc.name}과 대화 시작`, 'info');
+      }
+    },
+    onTileClick: (tileInfo) => {
+      updateTileInfoUI(tileInfo);
+    },
+  });
+
+  // 플레이어 시작 위치 (중앙 아래)
+  gameWorld.setPlayerPosition(5, 7);
+
+  // 대장장이 존 배치 (대장간 위치)
+  gameWorld.addNpc({
+    id: 'blacksmith_john',
+    emoji: '👨‍🔧',
+    position: { x: 3, y: 3 },
+    name: '대장장이 존',
+    facing: 'right',    // 모루 방향을 바라봄
+    visionRange: 2,     // 실내라서 시야 범위 축소
+  });
+
+  // 장애물 배치 (대장간 건물) - 벽은 시야도 차단
+  // 상단 벽 - 중앙에 "대장간" 표기
+  gameWorld.addBlockedTile(1, 1, { blocksVision: true });
+  gameWorld.addBlockedTile(2, 1, { blocksVision: true });
+  gameWorld.addBlockedTile(3, 1, { label: '대장간', blocksVision: true });
+  gameWorld.addBlockedTile(4, 1, { blocksVision: true });
+  gameWorld.addBlockedTile(5, 1, { blocksVision: true });
+  // 측면 벽
+  gameWorld.addBlockedTile(1, 2, { blocksVision: true });
+  gameWorld.addBlockedTile(5, 2, { blocksVision: true });
+  gameWorld.addBlockedTile(1, 3, { blocksVision: true });
+  gameWorld.addBlockedTile(5, 3, { blocksVision: true });
+  // 하단 벽 (입구 제외)
+  gameWorld.addBlockedTile(1, 4, { blocksVision: true });
+  gameWorld.addBlockedTile(2, 4, { blocksVision: true });
+  gameWorld.addBlockedTile(4, 4, { blocksVision: true });
+  gameWorld.addBlockedTile(5, 4, { blocksVision: true });
+
+  // 대장간 내부 오브젝트 - 모루
+  gameWorld.addObject({
+    id: 'anvil_1',
+    name: '모루',
+    emoji: '⚒️',
+    position: { x: 4, y: 2 },
+    description: '철을 두드려 무기를 만드는 모루',
+    state: '사용 가능',
+    blocksMovement: true,
+    blocksVision: false,
+  });
+
+  // 존의 집 (대장간 옆) - 벽은 시야 차단
+  // 상단 벽
+  gameWorld.addBlockedTile(6, 1, { blocksVision: true });
+  gameWorld.addBlockedTile(7, 1, { label: '존의집', blocksVision: true });
+  gameWorld.addBlockedTile(8, 1, { blocksVision: true });
+  gameWorld.addBlockedTile(9, 1, { blocksVision: true });
+  // 측면 벽
+  gameWorld.addBlockedTile(6, 2, { blocksVision: true });
+  gameWorld.addBlockedTile(9, 2, { blocksVision: true });
+  gameWorld.addBlockedTile(6, 3, { blocksVision: true });
+  gameWorld.addBlockedTile(9, 3, { blocksVision: true });
+  // 하단 벽 (입구: x:8)
+  gameWorld.addBlockedTile(6, 4, { blocksVision: true });
+  gameWorld.addBlockedTile(7, 4, { blocksVision: true });
+  gameWorld.addBlockedTile(9, 4, { blocksVision: true });
+
+  // 존의 집 내부 오브젝트 - 침대
+  gameWorld.addObject({
+    id: 'bed_john',
+    name: '침대',
+    emoji: '🛏️',
+    position: { x: 7, y: 2 },
+    description: '존이 잠을 자는 침대',
+    state: '비어있음',
+    blocksMovement: true,
+    blocksVision: false,
+  });
+
+  addLog('게임 월드 초기화 완료', 'success');
+}
+
 // 채팅 초기화
 async function initChat() {
   agent = new NPCAgent(blacksmithPersona, blacksmithScratch);
@@ -349,6 +694,9 @@ async function initChat() {
     addLog(message, type);
     updateMemoryUI(); // Reflection 후 메모리 UI 업데이트
   });
+
+  // 게임 월드 초기화 (GameTime 포함)
+  initGameWorld();
 
   // 전체 UI 초기화
   updateAllUI();
@@ -360,13 +708,22 @@ async function initChat() {
   addLog('NPC Agent 초기화 완료', 'success');
   addLog(`대장장이 존 로드됨 (메모리: ${agent.getMemoryCount()}개)`, 'info');
 
-  // LLM으로 첫 인사 생성
-  addLog('LLM 인사 생성 중...', 'info');
-  showTypingIndicator();
-  const greeting = await agent.greet();
-  hideTypingIndicator();
-  addMessage('npc', greeting, agent.getName());
-  addLog('인사 생성 완료', 'success');
+  // NPC 기상 및 하루 계획 생성 (게임 시작 = 06:00)
+  await npcWakeUp(gameTime.getState().day);
+
+  // NPC 근처가 아니면 인사 건너뜀
+  if (!nearbyNpc) {
+    addMessage('system', 'NPC 근처로 이동하면 대화할 수 있습니다. (WASD/방향키/클릭)', '시스템');
+    userInput.placeholder = 'NPC 근처로 이동하세요...';
+  } else {
+    // LLM으로 첫 인사 생성
+    addLog('LLM 인사 생성 중...', 'info');
+    showTypingIndicator();
+    const greeting = await agent.greet();
+    hideTypingIndicator();
+    addMessage('npc', greeting, agent.getName());
+    addLog('인사 생성 완료', 'success');
+  }
 
   userInput.focus();
 }

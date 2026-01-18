@@ -20,12 +20,26 @@ export interface Persona {
   speechStyle: string;
 }
 
+// 일일 계획 아이템
+export interface DailyPlanItem {
+  time: string;           // "06:00", "08:00" 형식
+  activity: string;       // "대장간 열기", "검 제작" 등
+  location?: string;      // 선택적 위치
+  duration: number;       // 분 단위 지속 시간
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  goalRelated?: boolean;  // 목표와 연관된 활동 여부
+}
+
 // NPC 현재 상태
 export interface Scratch {
   currentLocation: string;
   currentActivity: string;
   currentMood: string;
   currentTime: string;
+  // Planning 관련
+  dailyPlan?: DailyPlanItem[];    // 오늘의 계획
+  currentPlanIndex?: number;       // 현재 수행 중인 계획 인덱스
+  isAwake?: boolean;               // 기상 여부
 }
 
 // 대화 메시지
@@ -46,6 +60,7 @@ interface ChatResponse {
   response: string;
   mood: MoodType;
   intent?: string;
+  playerObservation?: string; // 대화에서 플레이어에 대해 새로 알게 된 것
 }
 
 export class NPCAgent {
@@ -75,7 +90,7 @@ export class NPCAgent {
   }
 
   /**
-   * 손님이 들어왔을 때 첫 인사
+   * 용사 스마게이 들어왔을 때 첫 인사
    */
   async greet(): Promise<string> {
     const p = this.persona;
@@ -94,7 +109,7 @@ export class NPCAgent {
 기분: ${s.currentMood}
 
 ## 상황
-손님이 당신의 가게에 막 들어왔습니다. 하던 일을 하면서 손님에게 첫 인사를 건네세요.
+용사 스마게이 당신의 가게에 막 들어왔습니다. 하던 일을 하면서 용사 스마게에게 첫 인사를 건네세요.
 
 ## 응답 지침
 - 1-2문장으로 짧게
@@ -125,6 +140,7 @@ export class NPCAgent {
     let responseText: string;
     let newMood: MoodType = this.scratch.currentMood as MoodType;
     let intent: string | undefined;
+    let playerObservation: string | undefined;
 
     try {
       const rawResponse = await gemini.generate(prompt);
@@ -134,6 +150,7 @@ export class NPCAgent {
         responseText = parsed.response;
         newMood = parsed.mood;
         intent = parsed.intent;
+        playerObservation = parsed.playerObservation || undefined;
       } else {
         // JSON 파싱 실패 시 원본 텍스트 사용
         responseText = rawResponse;
@@ -162,19 +179,28 @@ export class NPCAgent {
 
     this.memoryStore.add({
       type: 'observation',
-      content: `손님이 말했다: "${userMessage}"`,
+      content: `용사 스마게이 말했다: "${userMessage}"`,
     });
 
     this.memoryStore.add({
       type: 'observation',
-      content: `나는 손님에게 말했다: "${responseText}"${intent ? ` (의도: ${intent})` : ''}`,
+      content: `나는 용사 스마게에게 말했다: "${responseText}"${intent ? ` (의도: ${intent})` : ''}`,
     });
 
-    // 6. 대화 히스토리 업데이트
+    // 6. 플레이어에 대한 관찰이 있으면 저장
+    if (playerObservation) {
+      this.memoryStore.add({
+        type: 'observation',
+        content: `[용사 스마게에 대한 관찰] ${playerObservation}`,
+      });
+      this.log(`👁️ 관찰: ${playerObservation}`, 'info');
+    }
+
+    // 7. 대화 히스토리 업데이트
     this.conversationHistory.push({ speaker: 'user', content: userMessage, timestamp: now });
     this.conversationHistory.push({ speaker: 'npc', content: responseText, timestamp: now });
 
-    // 7. 대화 카운트 증가 및 Reflection 체크
+    // 8. 대화 카운트 증가 및 Reflection 체크
     this.chatCount++;
     if (this.chatCount >= 10 && !this.isReflecting) {
       this.triggerReflection();
@@ -239,7 +265,7 @@ export class NPCAgent {
    */
   private async evaluateRecentImportance(): Promise<void> {
     const memories = this.memoryStore.getAll();
-    const recentMemories = memories.filter((m) => m.importance === 5).slice(-20); // 기본값 5인 최근 메모리만
+    const recentMemories = memories.filter((m) => m.importance === undefined).slice(-20); // 미평가 메모리만
 
     if (recentMemories.length === 0) {
       this.log('평가할 새 메모리 없음', 'info');
@@ -292,8 +318,8 @@ JSON 배열만 출력:`;
 
     this.log('💭 Reflection 생성 중...', 'info');
 
-    // 높은 중요도 순으로 정렬
-    const sortedByImportance = [...recentMemories].sort((a, b) => b.importance - a.importance);
+    // 높은 중요도 순으로 정렬 (미평가는 5로 간주)
+    const sortedByImportance = [...recentMemories].sort((a, b) => (b.importance ?? 5) - (a.importance ?? 5));
     const topMemories = sortedByImportance.slice(0, 10);
 
     const prompt = `당신은 대장장이 존입니다. 최근 경험들을 돌아보며 깨달은 점이나 느낀 점을 정리해주세요.
@@ -303,11 +329,11 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 
 위 기억들을 바탕으로:
 1. 어떤 패턴이나 깨달음이 있는지
-2. 손님에 대해 어떤 인상을 받았는지
+2. 용사 스마게에 대해 어떤 인상을 받았는지
 3. 앞으로 어떻게 해야 할지
 
 대장장이 존의 관점에서 1-2문장의 짧은 성찰을 작성하세요.
-예시: "최근 손님들이 철광석에 대해 자주 물어보는군. 수급 문제를 해결해야겠어."
+예시: "최근 용사 스마게들이 철광석에 대해 자주 물어보는군. 수급 문제를 해결해야겠어."
 
 성찰 내용만 출력:`;
 
@@ -363,14 +389,14 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
     const recent = this.conversationHistory.slice(-6);
     if (recent.length > 0) {
       history += recent
-        .map((msg) => `${msg.speaker === 'user' ? '손님' : p.name}: ${msg.content}`)
+        .map((msg) => `${msg.speaker === 'user' ? '용사 스마게' : p.name}: ${msg.content}`)
         .join('\n');
     } else {
-      history += '(이전 대화 없음 - 손님이 방금 들어왔다)';
+      history += '(이전 대화 없음 - 용사 스마게이 방금 들어왔다)';
     }
 
     // 5. 현재 발화
-    const current = `## 손님의 말\n"${userMessage}"`;
+    const current = `## 용사 스마게의 말\n"${userMessage}"`;
 
     // 6. 응답 지침 (JSON 형식 요청)
     const instruction = `## 응답 지침
@@ -382,11 +408,13 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 
 ## 출력 형식
 반드시 다음 JSON 형식으로만 출력하세요:
-{"response": "대화 내용", "mood": "감정상태", "intent": "의도"}
+{"response": "대화 내용", "mood": "감정상태", "intent": "의도", "playerObservation": "관찰 또는 null"}
 
 - response: 대화 내용 (행동 묘사나 따옴표 없이)
 - mood: 대화 후 당신의 감정 (happy/neutral/sad/angry/fearful/excited/curious 중 하나)
 - intent: 이 대화에서 당신의 의도 (sell/help/refuse/inquire/share_story/warn/chat 중 하나)
+- playerObservation: 이 대화에서 용사 스마게에 대해 새로 알게 된 것이 있다면 1문장으로 작성. 없으면 null
+  예: "용사 스마게는 기사단 출신이라고 한다", "이 용사는 검에 관심이 많은 것 같다", "허세가 있지만 나쁜 녀석은 아닌 듯"
 
 JSON만 출력:`;
 
@@ -404,6 +432,10 @@ JSON만 출력:`;
 
   getScratch(): Scratch {
     return { ...this.scratch };
+  }
+
+  updateScratch(updates: Partial<Scratch>): void {
+    this.scratch = { ...this.scratch, ...updates };
   }
 
   getConversationHistory(): ChatMessage[] {
@@ -430,5 +462,336 @@ JSON만 출력:`;
     this.memoryStore.clear();
     this.conversationHistory = [];
     this.chatCount = 0;
+  }
+
+  // ========================================
+  // Planning System (논문 기반 개선)
+  // ========================================
+
+  /**
+   * Agent Summary 생성 (논문: "Agent summary")
+   * 페르소나 요약 + 목표를 구조화하여 Planning의 입력으로 사용
+   */
+  private generateAgentSummary(): string {
+    const p = this.persona;
+
+    // 목표를 구조화
+    const goalsFormatted = p.currentGoals.length > 0
+      ? p.currentGoals.map((g, i) => `  ${i + 1}. ${g}`).join('\n')
+      : '  (특별한 목표 없음)';
+
+    return `## ${p.name} 요약
+이름: ${p.name} (${p.age}세)
+직업: ${p.occupation}
+위치: ${p.location}
+성격: ${p.traits.join(', ')}
+
+### 현재 목표
+${goalsFormatted}
+
+### 배경
+${p.backstory}`;
+  }
+
+  /**
+   * 어제 활동 기록 검색 (논문: "Yesterday's activities")
+   */
+  private getYesterdayActivities(): string {
+    // plan 타입 메모리 중 최근 것 검색
+    const allMemories = this.memoryStore.getAll();
+    const planMemories = allMemories
+      .filter(m => m.type === 'plan')
+      .slice(-3); // 최근 3개 계획
+
+    if (planMemories.length === 0) {
+      return '(첫 번째 날 - 이전 기록 없음)';
+    }
+
+    // 가장 최근 하루 완료 기록 검색
+    const completionMemories = allMemories
+      .filter(m => m.content.includes('하루가 끝났다') || m.content.includes('계획') && m.content.includes('완료'))
+      .slice(-1);
+
+    const yesterday = completionMemories.length > 0
+      ? completionMemories[0].content
+      : planMemories[planMemories.length - 1].content;
+
+    return yesterday;
+  }
+
+  /**
+   * NPC 기상 - 하루 계획 생성
+   */
+  async wakeUp(currentTime: string = '06:00'): Promise<DailyPlanItem[]> {
+    this.scratch.isAwake = true;
+    this.scratch.currentTime = currentTime;
+    this.log('☀️ 기상! 하루 계획 생성 중...', 'info');
+
+    // 하루 계획 생성
+    const plan = await this.generateDailyPlan();
+    this.scratch.dailyPlan = plan;
+    this.scratch.currentPlanIndex = 0;
+
+    // 첫 번째 계획 시작
+    if (plan.length > 0) {
+      plan[0].status = 'in_progress';
+      this.scratch.currentActivity = plan[0].activity;
+      this.scratch.currentLocation = plan[0].location || this.scratch.currentLocation;
+    }
+
+    // 기상을 메모리에 기록
+    this.memoryStore.add({
+      type: 'observation',
+      content: `아침 ${currentTime}에 일어났다. 오늘 할 일: ${plan.slice(0, 3).map(p => p.activity).join(', ')}...`,
+      importance: 3,
+    });
+
+    this.log(`📋 ${plan.length}개의 일정 생성됨`, 'success');
+    return plan;
+  }
+
+  /**
+   * NPC 취침 - 하루 정리
+   */
+  async sleep(): Promise<void> {
+    this.scratch.isAwake = false;
+    this.log('🌙 취침 준비...', 'info');
+
+    // 오늘 계획 완료율 계산
+    const plan = this.scratch.dailyPlan || [];
+    const completed = plan.filter(p => p.status === 'completed').length;
+    const total = plan.length;
+
+    // 하루 요약을 메모리에 저장
+    this.memoryStore.add({
+      type: 'observation',
+      content: `하루가 끝났다. 계획 ${total}개 중 ${completed}개를 완료했다.`,
+      importance: 4,
+    });
+
+    // 계획 초기화
+    this.scratch.dailyPlan = undefined;
+    this.scratch.currentPlanIndex = undefined;
+    this.scratch.currentActivity = '잠자는 중';
+
+    this.log(`😴 취침. 오늘 ${completed}/${total} 완료`, 'success');
+  }
+
+  /**
+   * 하루 계획 생성 (LLM 사용) - 논문 기반 개선
+   *
+   * 입력:
+   * 1. Agent Summary (페르소나 + 목표)
+   * 2. Yesterday's Activities (어제 활동)
+   * 3. 관련 기억 (목표 진행 관련)
+   */
+  private async generateDailyPlan(): Promise<DailyPlanItem[]> {
+    const p = this.persona;
+
+    // 1. Agent Summary 생성
+    const agentSummary = this.generateAgentSummary();
+
+    // 2. 어제 활동 검색
+    const yesterdayActivities = this.getYesterdayActivities();
+
+    // 3. 목표 관련 기억 검색
+    const goalKeywords = p.currentGoals.join(' ');
+    const relevantMemories = this.memoryStore.retrieve(goalKeywords, 5);
+    const memoryContext = relevantMemories.length > 0
+      ? relevantMemories.map(m => `- ${m.content}`).join('\n')
+      : '(관련 기억 없음)';
+
+    const prompt = `${agentSummary}
+
+## 어제 활동
+${yesterdayActivities}
+
+## 관련 기억
+${memoryContext}
+
+## 요청
+위의 정보를 바탕으로 오늘 하루의 계획을 만들어주세요.
+
+**중요**: 계획은 반드시 "현재 목표"를 달성하기 위한 활동을 포함해야 합니다!
+- 목표: ${p.currentGoals.join(', ')}
+- 이 목표들을 위해 오늘 구체적으로 무엇을 할 수 있을지 고민하세요.
+
+### 계획 조건
+- 06:00 기상부터 22:00 취침까지
+- ${p.occupation}의 일과에 맞게 현실적으로
+- 식사, 휴식 시간 포함
+- 각 활동은 30분~2시간 단위
+- **목표 달성을 위한 활동을 최소 1-2개 포함**
+
+## 출력 형식
+반드시 다음 JSON 배열로만 출력하세요:
+[
+  {"time": "06:00", "activity": "활동 내용", "location": "장소", "duration": 60, "goalRelated": true},
+  ...
+]
+
+- time: "HH:MM" 형식
+- activity: 구체적인 활동 (예: "아침 식사", "철광석 상인 찾아보기")
+- location: 장소
+- duration: 분 단위
+- goalRelated: 목표와 관련된 활동이면 true (선택사항)
+
+JSON 배열만 출력:`;
+
+    try {
+      const response = await gemini.generate(prompt);
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+
+      if (!jsonMatch) {
+        throw new Error('JSON 배열을 찾을 수 없음');
+      }
+
+      const rawPlan = JSON.parse(jsonMatch[0]) as Array<{
+        time: string;
+        activity: string;
+        location?: string;
+        duration: number;
+        goalRelated?: boolean;
+      }>;
+
+      // DailyPlanItem으로 변환 (status 추가)
+      const plan: DailyPlanItem[] = rawPlan.map(item => ({
+        time: item.time,
+        activity: item.activity,
+        location: item.location,
+        duration: item.duration || 60,
+        status: 'pending' as const,
+        goalRelated: item.goalRelated,
+      }));
+
+      // 목표 관련 활동 추출
+      const goalActivities = plan.filter(p => p.goalRelated);
+      const goalNote = goalActivities.length > 0
+        ? ` [목표 관련: ${goalActivities.map(g => g.activity).join(', ')}]`
+        : '';
+
+      // 계획을 메모리에 저장
+      this.memoryStore.add({
+        type: 'plan',
+        content: `오늘의 계획: ${plan.map(p => `${p.time} ${p.activity}`).join(' → ')}${goalNote}`,
+        importance: 5,
+      });
+
+      return plan;
+    } catch (error) {
+      console.error('계획 생성 실패:', error);
+      this.log('⚠️ 계획 생성 실패, 기본 일과 사용', 'warning');
+
+      // 기본 일과 반환
+      return this.getDefaultDailyPlan();
+    }
+  }
+
+  /**
+   * 기본 일과 (LLM 실패 시)
+   */
+  private getDefaultDailyPlan(): DailyPlanItem[] {
+    return [
+      { time: '06:00', activity: '기상 및 아침 준비', location: '집', duration: 60, status: 'pending' },
+      { time: '07:00', activity: '아침 식사', location: '집', duration: 30, status: 'pending' },
+      { time: '07:30', activity: '대장간으로 이동', location: '마을 거리', duration: 15, status: 'pending' },
+      { time: '08:00', activity: '대장간 열기 및 불 피우기', location: '대장간', duration: 30, status: 'pending' },
+      { time: '08:30', activity: '주문받은 물건 제작', location: '대장간 내부', duration: 180, status: 'pending' },
+      { time: '12:00', activity: '점심 식사', location: '대장간 뒤편', duration: 60, status: 'pending' },
+      { time: '13:00', activity: '오후 작업 - 수리 및 제작', location: '대장간 내부', duration: 240, status: 'pending' },
+      { time: '17:00', activity: '대장간 정리', location: '대장간', duration: 60, status: 'pending' },
+      { time: '18:00', activity: '저녁 식사', location: '집', duration: 60, status: 'pending' },
+      { time: '19:00', activity: '개인 시간', location: '집', duration: 120, status: 'pending' },
+      { time: '21:00', activity: '취침 준비', location: '집', duration: 60, status: 'pending' },
+    ];
+  }
+
+  /**
+   * 시간에 따라 현재 계획 업데이트
+   */
+  updatePlanProgress(currentTime: string): { changed: boolean; newActivity?: DailyPlanItem } {
+    if (!this.scratch.dailyPlan || !this.scratch.isAwake) {
+      return { changed: false };
+    }
+
+    const plan = this.scratch.dailyPlan;
+    const currentMinutes = this.timeToMinutes(currentTime);
+
+    // 현재 시간에 맞는 계획 찾기
+    let targetIndex = -1;
+    for (let i = 0; i < plan.length; i++) {
+      const planMinutes = this.timeToMinutes(plan[i].time);
+      const endMinutes = planMinutes + plan[i].duration;
+
+      if (currentMinutes >= planMinutes && currentMinutes < endMinutes) {
+        targetIndex = i;
+        break;
+      }
+    }
+
+    // 마지막 계획 시간을 지났으면 마지막 계획 유지
+    if (targetIndex === -1 && plan.length > 0) {
+      const lastPlan = plan[plan.length - 1];
+      const lastEndMinutes = this.timeToMinutes(lastPlan.time) + lastPlan.duration;
+      if (currentMinutes >= lastEndMinutes) {
+        // 모든 계획 완료
+        return { changed: false };
+      }
+    }
+
+    const currentIndex = this.scratch.currentPlanIndex ?? 0;
+
+    // 계획이 변경되었는지 확인
+    if (targetIndex !== currentIndex && targetIndex !== -1) {
+      // 이전 계획 완료 처리
+      for (let i = currentIndex; i < targetIndex; i++) {
+        if (plan[i].status === 'in_progress') {
+          plan[i].status = 'completed';
+        } else if (plan[i].status === 'pending') {
+          plan[i].status = 'skipped';
+        }
+      }
+
+      // 새 계획 시작
+      plan[targetIndex].status = 'in_progress';
+      this.scratch.currentPlanIndex = targetIndex;
+      this.scratch.currentActivity = plan[targetIndex].activity;
+      if (plan[targetIndex].location) {
+        this.scratch.currentLocation = plan[targetIndex].location;
+      }
+      this.scratch.currentTime = currentTime;
+
+      this.log(`📍 활동 변경: ${plan[targetIndex].activity}`, 'info');
+
+      return { changed: true, newActivity: plan[targetIndex] };
+    }
+
+    this.scratch.currentTime = currentTime;
+    return { changed: false };
+  }
+
+  /**
+   * 시간 문자열을 분 단위로 변환
+   */
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
+  /**
+   * 현재 계획 가져오기
+   */
+  getDailyPlan(): DailyPlanItem[] | undefined {
+    return this.scratch.dailyPlan;
+  }
+
+  /**
+   * 현재 진행 중인 계획 아이템
+   */
+  getCurrentPlanItem(): DailyPlanItem | undefined {
+    if (!this.scratch.dailyPlan || this.scratch.currentPlanIndex === undefined) {
+      return undefined;
+    }
+    return this.scratch.dailyPlan[this.scratch.currentPlanIndex];
   }
 }

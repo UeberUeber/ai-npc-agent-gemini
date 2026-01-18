@@ -12,7 +12,7 @@ export interface Memory {
   type: MemoryType;
   content: string;
   timestamp: string;
-  importance: number;
+  importance?: number; // 미평가 시 undefined, 10개 대화 후 LLM이 1-10 평가
   lastAccess: string;
   sources?: string[];
 }
@@ -49,7 +49,7 @@ export class MemoryStore {
 
   /**
    * 새 메모리 추가
-   * 중요도는 기본값 5로 저장 (API 호출 없음, 빠름)
+   * 중요도는 판단하지 않고 저장 (10개 쌓이면 LLM으로 일괄 평가)
    */
   add(input: {
     type: MemoryType;
@@ -60,8 +60,8 @@ export class MemoryStore {
     const memories = this.loadMemories();
     const now = new Date().toISOString();
 
-    // 중요도: 제공되면 사용, 아니면 기본값 5
-    const importance = input.importance ?? 5;
+    // 중요도: 제공되면 사용, 아니면 미평가(undefined)
+    const importance = input.importance;
 
     const memory: Memory = {
       id: `m${String(memories.length + 1).padStart(3, '0')}`,
@@ -94,8 +94,8 @@ export class MemoryStore {
       const hoursSince = (now.getTime() - lastAccess.getTime()) / (1000 * 60 * 60);
       const recency = Math.pow(RECENCY_DECAY, hoursSince);
 
-      // Importance (정규화)
-      const importance = memory.importance / 10;
+      // Importance (정규화) - 미평가 시 기본 0.5 (중간값)
+      const importance = (memory.importance ?? 5) / 10;
 
       // Relevance (간단한 키워드 매칭)
       const queryWords = query.toLowerCase().split(/\s+/);
@@ -159,7 +159,7 @@ export class MemoryStore {
    */
   getRecentImportanceSum(count: number = 20): number {
     const memories = this.loadMemories();
-    return memories.slice(-count).reduce((sum, m) => sum + m.importance, 0);
+    return memories.slice(-count).reduce((sum, m) => sum + (m.importance ?? 5), 0);
   }
 
   /**
