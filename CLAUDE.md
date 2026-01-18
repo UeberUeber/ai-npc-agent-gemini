@@ -52,11 +52,16 @@ npx tsx src/main.ts
 ```
 src/
 ├── client/                 # 브라우저용 구현 (메인)
-│   ├── agent.ts           # NPC 에이전트 (대화, 감정, 리플렉션)
+│   ├── agent.ts           # NPC 에이전트 (대화, 감정, 리플렉션, Planning, 자율발화)
 │   ├── memory.ts          # localStorage 기반 기억 저장소
 │   ├── gemini.ts          # Gemini API 클라이언트 (브라우저)
+│   ├── game/              # 게임 월드 시스템
+│   │   ├── npc-controller.ts  # NPC 행동 제어 (이동, 인지, 대화 상태)
+│   │   └── world.ts       # 타일맵 월드, 시야 시스템
 │   └── npcs/
-│       └── blacksmith_john.ts  # 대장장이 존 NPC 정의
+│       ├── types.ts       # NPC 타입 정의 (Persona, Scratch, NpcState)
+│       ├── blacksmith_john.ts  # 대장장이 존 NPC 정의
+│       └── innkeeper_rosa.ts   # 여관주인 로사 NPC 정의
 ├── lib/                    # 서버용 구현 (대안)
 │   ├── npc/
 │   │   ├── agent.ts       # 서버 사이드 NPC 에이전트
@@ -67,7 +72,7 @@ src/
 ├── api/
 │   └── gemini.ts          # Gemini API 클라이언트 (서버)
 ├── web/
-│   └── app.ts             # UI 컨트롤러
+│   └── app.ts             # UI 컨트롤러, NPC 관리
 ├── main.ts                # CLI 인터페이스
 └── server.ts              # HTTP API 서버
 ```
@@ -112,6 +117,8 @@ NPC는 대화에 따라 감정 상태가 자동 변화: `happy`, `neutral`, `sad
 - `observation`: 관찰/대화 기록
 - `reflection`: 성찰/통찰
 - `plan`: 계획
+- `knowledge`: 세계 지식 (장소, 다른 NPC 정보 등)
+- `thought`: 속마음/내면 판단 (혼잣말, 대화 지속 여부 판단 등)
 
 **검색 점수 계산**:
 ```
@@ -159,11 +166,12 @@ VITE_GEMINI_MODEL=gemini-2.0-flash-001
 
 ## 미구현 기능
 
-- [ ] 다중 NPC 지원 (현재 blacksmith_john만 구현)
-- [ ] NPC 간 대화
+- [x] ~~다중 NPC 지원~~ → 구현됨 (blacksmith_john, innkeeper_rosa)
+- [x] ~~NPC 간 대화~~ → 구현됨 (시야 내 NPC 인식 → 자발적 대화)
 - [ ] 이벤트/트리거 시스템
 - [ ] 영구 백엔드 저장소
 - [ ] Phaser.js 게임 통합
+- [ ] 임베딩 기반 relevance 검색 (현재 키워드 매칭)
 
 ## 주의사항
 

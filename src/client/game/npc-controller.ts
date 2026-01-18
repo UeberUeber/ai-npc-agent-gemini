@@ -8,7 +8,7 @@
  */
 
 import { NPCAgent, DailyPlanItem } from '../agent';
-import { GameWorld, Position, Entity, NpcEntity, WorldObject } from './world';
+import { GameWorld, Position, Entity, WorldObject } from './world';
 import { NpcDefinition, NpcState, LocationDef } from '../npcs/types';
 
 // 인식 캐시: 이미 본 것 추적 (델타 기반 관찰용)
@@ -217,8 +217,8 @@ export class NpcController {
 
     this.log(`💬 대화 종료 (${this.conversationTurns}턴)`, 'info');
 
-    // 대화 중 시간이 많이 흘렀으면 재플래닝 필요
-    // TODO: 대화 종료 후 재플래닝 로직
+    // 대화 중 시간이 많이 흘렀으면 재플래닝 필요할 수 있음
+    // 현재는 이전 계획 그대로 진행 (향후 시간 경과량에 따른 재플래닝 추가 가능)
 
     // 이전 상태로 복원
     const previousState = this.stateBeforeConversing || 'idle';

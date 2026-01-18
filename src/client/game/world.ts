@@ -100,6 +100,17 @@ export class GameWorld {
     this.initKeyboardControls();
   }
 
+  /** 좌표가 그리드 범위 내인지 확인 */
+  private isInBounds(x: number, y: number): boolean {
+    return x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize;
+  }
+
+  /** 좌표의 타일 요소 반환 (범위 외면 null) */
+  private getTile(x: number, y: number): HTMLElement | null {
+    if (!this.isInBounds(x, y)) return null;
+    return this.tiles[y]?.[x] ?? null;
+  }
+
   private initGrid(): void {
     this.gridElement.innerHTML = '';
     this.tiles = [];
@@ -359,7 +370,8 @@ export class GameWorld {
 
     // 오브젝트 렌더링
     for (const obj of this.objects) {
-      const tile = this.tiles[obj.position.y][obj.position.x];
+      const tile = this.getTile(obj.position.x, obj.position.y);
+      if (!tile) continue;
       tile.classList.add('object');
       tile.textContent = obj.emoji;
     }
@@ -368,7 +380,8 @@ export class GameWorld {
     for (const npc of this.npcs) {
       const visionTiles = this.getVisionTiles(npc);
       for (const pos of visionTiles) {
-        const tile = this.tiles[pos.y][pos.x];
+        const tile = this.getTile(pos.x, pos.y);
+        if (!tile) continue;
         tile.classList.add('npc-vision');
       }
     }
@@ -376,7 +389,8 @@ export class GameWorld {
     // NPC 렌더링
     const nearbyNpc = this.getNearbyNpc();
     for (const npc of this.npcs) {
-      const tile = this.tiles[npc.position.y][npc.position.x];
+      const tile = this.getTile(npc.position.x, npc.position.y);
+      if (!tile) continue;
       tile.classList.add('npc');
       tile.classList.add(`facing-${npc.facing || 'down'}`);
       tile.textContent = npc.emoji;
@@ -391,15 +405,17 @@ export class GameWorld {
     }
 
     // 플레이어 렌더링
-    const playerTile = this.tiles[this.player.position.y][this.player.position.x];
-    playerTile.classList.add('player');
-    playerTile.classList.add(`facing-${this.playerFacing}`);
-    playerTile.textContent = this.player.emoji;
-    // 방향 화살표 추가
-    const playerArrow = document.createElement('span');
-    playerArrow.className = 'player-direction';
-    playerArrow.textContent = this.getDirectionArrow(this.playerFacing);
-    playerTile.appendChild(playerArrow);
+    const playerTile = this.getTile(this.player.position.x, this.player.position.y);
+    if (playerTile) {
+      playerTile.classList.add('player');
+      playerTile.classList.add(`facing-${this.playerFacing}`);
+      playerTile.textContent = this.player.emoji;
+      // 방향 화살표 추가
+      const playerArrow = document.createElement('span');
+      playerArrow.className = 'player-direction';
+      playerArrow.textContent = this.getDirectionArrow(this.playerFacing);
+      playerTile.appendChild(playerArrow);
+    }
   }
 
   /**

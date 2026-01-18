@@ -95,6 +95,30 @@ const moodKorean: Record<string, string> = {
   curious: '호기심',
 };
 
+// NPC 아이콘 매핑 (중앙화) - ID 또는 이름으로 아이콘 반환
+const NPC_ICONS: Record<string, string> = {
+  'blacksmith_john': '👨‍🔧',
+  'innkeeper_rosa': '👩‍🍳',
+  '존': '👨‍🔧',
+  'john': '👨‍🔧',
+  '로사': '👩‍🍳',
+  'rosa': '👩‍🍳',
+};
+
+function getNpcIcon(npcIdOrName: string): string {
+  const lowerName = npcIdOrName.toLowerCase();
+  // 정확히 매칭되는 경우
+  if (NPC_ICONS[lowerName]) return NPC_ICONS[lowerName];
+  if (NPC_ICONS[npcIdOrName]) return NPC_ICONS[npcIdOrName];
+  // 부분 매칭 (이름에 포함된 경우)
+  for (const [key, icon] of Object.entries(NPC_ICONS)) {
+    if (lowerName.includes(key) || npcIdOrName.includes(key)) {
+      return icon;
+    }
+  }
+  return '🧑';  // 기본 NPC 아이콘
+}
+
 // 대화 카운터
 let chatCount = 0;
 
@@ -104,24 +128,18 @@ function getCurrentAgent(): NPCAgent | null {
   return agents.get(currentNpcId) || null;
 }
 
-// 현재 대화 중인 NPC의 Controller 가져오기
-function getCurrentController(): NpcController | null {
-  if (!currentNpcId) return null;
-  return npcControllers.get(currentNpcId) || null;
-}
-
-// 시스템 로그 추가
+// 시스템 로그 추가 (최신이 위에 표시)
 function addLog(message: string, type: 'info' | 'success' | 'warning' = 'info') {
   const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const logItem = document.createElement('div');
   logItem.className = `log-item ${type}`;
   logItem.innerHTML = `<span class="timestamp">[${time}]</span>${message}`;
-  systemLog.appendChild(logItem);
-  systemLog.scrollTop = systemLog.scrollHeight;
+  // 최신 로그를 맨 위에 추가
+  systemLog.prepend(logItem);
 
-  // 최대 50개 로그 유지
+  // 최대 50개 로그 유지 (오래된 것부터 삭제)
   while (systemLog.children.length > 50) {
-    systemLog.removeChild(systemLog.firstChild!);
+    systemLog.removeChild(systemLog.lastChild!);
   }
 }
 
@@ -137,18 +155,12 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  // NPC별 아이콘 분기
-  let avatarIcon = '⚙️';
+  // 메시지 타입별 아이콘 결정
+  let avatarIcon = '⚙️';  // system
   if (type === 'user') {
     avatarIcon = '🦸';
   } else if (type === 'npc') {
-    if (sender.includes('존') || sender.toLowerCase().includes('john')) {
-      avatarIcon = '👨‍🔧';
-    } else if (sender.includes('로사') || sender.toLowerCase().includes('rosa')) {
-      avatarIcon = '👩‍🍳';
-    } else {
-      avatarIcon = '🧑';  // 기타 NPC
-    }
+    avatarIcon = getNpcIcon(sender);
   }
   avatar.textContent = avatarIcon;
 
@@ -168,7 +180,11 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
   messageDiv.appendChild(contentDiv);
 
   chatMessages.appendChild(messageDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  // 부모 컨테이너(.panel-content)가 스크롤 가능하므로 부모를 스크롤
+  const scrollContainer = chatMessages.parentElement;
+  if (scrollContainer) {
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
 }
 
 // 타이핑 인디케이터
@@ -179,14 +195,7 @@ function showTypingIndicator(npcId?: string) {
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  // NPC별 아이콘 분기
-  let avatarIcon = '🧑';
-  if (npcId === 'blacksmith_john') {
-    avatarIcon = '👨‍🔧';
-  } else if (npcId === 'innkeeper_rosa') {
-    avatarIcon = '👩‍🍳';
-  }
-  avatar.textContent = avatarIcon;
+  avatar.textContent = npcId ? getNpcIcon(npcId) : '🧑';
 
   const typing = document.createElement('div');
   typing.className = 'typing-indicator';
@@ -195,7 +204,11 @@ function showTypingIndicator(npcId?: string) {
   indicator.appendChild(avatar);
   indicator.appendChild(typing);
   chatMessages.appendChild(indicator);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  // 부모 컨테이너(.panel-content)가 스크롤 가능하므로 부모를 스크롤
+  const scrollContainer = chatMessages.parentElement;
+  if (scrollContainer) {
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  }
 }
 
 function hideTypingIndicator() {

@@ -5,7 +5,7 @@
  */
 
 import { gemini } from './gemini';
-import { MemoryStore, RetrievedMemory, Memory } from './memory';
+import { MemoryStore, RetrievedMemory } from './memory';
 
 // NPC 페르소나 타입
 export interface Persona {
@@ -273,7 +273,9 @@ export class NPCAgent {
    */
   private async evaluateRecentImportance(): Promise<void> {
     const memories = this.memoryStore.getAll();
-    const recentMemories = memories.filter((m) => m.importance === undefined).slice(-20); // 미평가 메모리만
+    // 미평가 메모리 중 최근 20개만 평가 (API 비용 절감 + 토큰 제한)
+    const MAX_MEMORIES_TO_EVALUATE = 20;
+    const recentMemories = memories.filter((m) => m.importance === undefined).slice(-MAX_MEMORIES_TO_EVALUATE);
 
     if (recentMemories.length === 0) {
       this.log('평가할 새 메모리 없음', 'info');
@@ -297,15 +299,31 @@ JSON 배열만 출력:`;
 
     try {
       const response = await gemini.generate(prompt);
-      const ratings = JSON.parse(response) as Array<{ id: string; importance: number }>;
 
+      // JSON 배열 추출 (응답에 다른 텍스트가 섞여있을 수 있음)
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        this.log('⚠️ 중요도 응답에서 JSON 배열을 찾을 수 없음', 'warning');
+        return;
+      }
+
+      const ratings = JSON.parse(jsonMatch[0]) as Array<{ id: string; importance: number }>;
+
+      // 유효성 검사
+      if (!Array.isArray(ratings)) {
+        this.log('⚠️ 중요도 응답이 배열이 아님', 'warning');
+        return;
+      }
+
+      let updatedCount = 0;
       for (const rating of ratings) {
         if (rating.id && typeof rating.importance === 'number') {
           this.memoryStore.updateImportance(rating.id, Math.min(10, Math.max(1, rating.importance)));
+          updatedCount++;
         }
       }
 
-      this.log(`✓ ${ratings.length}개 메모리 중요도 업데이트됨`, 'success');
+      this.log(`✓ ${updatedCount}개 메모리 중요도 업데이트됨`, 'success');
     } catch (error) {
       console.error('중요도 평가 오류:', error);
       this.log('⚠️ 중요도 평가 실패', 'warning');
@@ -556,14 +574,17 @@ ${p.backstory}`;
 
     // 가장 최근 하루 완료 기록 검색
     const completionMemories = allMemories
-      .filter(m => m.content.includes('하루가 끝났다') || m.content.includes('계획') && m.content.includes('완료'))
+      .filter(m => m.content.includes('하루가 끝났다') || (m.content.includes('계획') && m.content.includes('완료')))
       .slice(-1);
 
-    const yesterday = completionMemories.length > 0
-      ? completionMemories[0].content
-      : planMemories[planMemories.length - 1].content;
-
-    return yesterday;
+    // 완료 기록 > 계획 기록 > 기본값 순서로 fallback
+    if (completionMemories.length > 0) {
+      return completionMemories[0].content;
+    }
+    if (planMemories.length > 0) {
+      return planMemories[planMemories.length - 1].content;
+    }
+    return '(첫 번째 날 - 이전 기록 없음)';
   }
 
   /**
@@ -827,8 +848,9 @@ JSON 배열만 출력:`;
       plan[targetIndex].status = 'in_progress';
       this.scratch.currentPlanIndex = targetIndex;
       this.scratch.currentActivity = plan[targetIndex].activity;
-      if (plan[targetIndex].location) {
-        this.scratch.currentLocation = plan[targetIndex].location;
+      const newLocation = plan[targetIndex].location;
+      if (newLocation) {
+        this.scratch.currentLocation = newLocation;
       }
       this.scratch.currentTime = currentTime;
 

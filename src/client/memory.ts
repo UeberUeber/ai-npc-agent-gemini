@@ -21,14 +21,17 @@ export interface RetrievedMemory extends Memory {
   score: number;
 }
 
+// 시간 경과에 따른 기억 감쇠율 (0.995^hours)
 const RECENCY_DECAY = 0.995;
+// 미평가 기억의 기본 중요도 (중간값)
+const DEFAULT_IMPORTANCE = 5;
+// 키워드 검색 시 최소 글자 수 (1글자 단어 무시: "이", "a" 등)
+const MIN_KEYWORD_LENGTH = 2;
 
 export class MemoryStore {
-  private npcId: string;
   private storageKey: string;
 
   constructor(npcId: string) {
-    this.npcId = npcId;
     this.storageKey = `npc_memories_${npcId}`;
   }
 
@@ -95,14 +98,14 @@ export class MemoryStore {
       const recency = Math.pow(RECENCY_DECAY, hoursSince);
 
       // Importance (정규화) - 미평가 시 기본 0.5 (중간값)
-      const importance = (memory.importance ?? 5) / 10;
+      const importance = (memory.importance ?? DEFAULT_IMPORTANCE) / 10;
 
       // Relevance (간단한 키워드 매칭)
       const queryWords = query.toLowerCase().split(/\s+/);
       const contentLower = memory.content.toLowerCase();
       let matchCount = 0;
       for (const word of queryWords) {
-        if (word.length > 1 && contentLower.includes(word)) matchCount++;
+        if (word.length >= MIN_KEYWORD_LENGTH && contentLower.includes(word)) matchCount++;
       }
       const relevance = queryWords.length > 0 ? matchCount / queryWords.length : 0;
 
@@ -159,7 +162,7 @@ export class MemoryStore {
    */
   getRecentImportanceSum(count: number = 20): number {
     const memories = this.loadMemories();
-    return memories.slice(-count).reduce((sum, m) => sum + (m.importance ?? 5), 0);
+    return memories.slice(-count).reduce((sum, m) => sum + (m.importance ?? DEFAULT_IMPORTANCE), 0);
   }
 
   /**
