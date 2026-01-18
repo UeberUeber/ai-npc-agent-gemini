@@ -32,6 +32,7 @@ npm run dev
 | **Thought Memory** | 내적 판단/혼잣말을 thought 타입으로 메모리에 저장 |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
 | **Perception** | 시야 내 엔티티/오브젝트 감지 → 변화만 자연어로 메모리 저장 (델타 기반) |
+| **Plan-Aware Response** | 대화 응답 시 현재 계획 컨텍스트 반영 (하는 일, 시간, 다음 일정) |
 
 ## Architecture
 
@@ -573,6 +574,7 @@ if (this.scratch.currentMood === 'angry') return false;  // 화난 상태
 3. 프롬프트 조합 (buildPrompt)
    - Persona (정체성)
    - Scratch (현재 상태 + 감정)
+   - **현재 계획 컨텍스트** (하는 일, 시간, 다음 일정)
    - 관련 기억들
    - 최근 대화 히스토리 (6개)
    - 사용자 발화
@@ -782,6 +784,27 @@ clear(): void
 ```
 
 ## Changelog
+
+### 2025-01-19 (대화 지속 판단 & 재플래닝)
+- **Conversation Continuation Decision**: NPC가 대화 매 턴마다 계속할지 판단
+  - 성격(성실 vs 사교적), 다음 일정 중요도, 대화 내용 고려
+  - 내적 판단을 thought 메모리로 저장 ("슬슬 가봐야겠는데...")
+  - false 시 작별 인사 후 자동 대화 종료
+  - `checkShouldContinue()` → `shouldContinueConversation()` 체인
+- **Post-Conversation Replanning**: 긴 대화 후 자동 재플래닝
+  - 게임 내 30분 이상 대화 시 `updatePlanProgress()` 호출
+  - 새 활동 위치로 자동 이동
+  - `conversationStartTime` 추적, `checkNeedsReplanning()` 로직
+
+### 2025-01-19 (계획 기반 대화 응답)
+- **Plan-Aware Response**: 대화 응답 시 현재 계획 컨텍스트를 LLM에게 전달
+  - 현재 하는 일, 시작 시간, 예상 소요 시간, 장소
+  - 목표와 관련된 활동 여부
+  - 다음 일정 정보
+  - 예: "지금 요리 중이라 바빠요" 같은 상황 인식 응답 가능
+- **수정된 파일**
+  - `agent.ts`: `buildPrompt()`에 `getCurrentPlanItem()`, `getNextPlanItem()` 활용
+  - 응답 지침에 "현재 활동 반영" 힌트 추가
 
 ### 2025-01-18 (대화 시스템 고도화)
 - **NPC-NPC 대화 시스템**: NPC끼리 시야에서 만나면 자동 대화
