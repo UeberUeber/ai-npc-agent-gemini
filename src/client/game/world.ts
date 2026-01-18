@@ -723,6 +723,27 @@ export class GameWorld {
     );
   }
 
+  // NPC가 현재 볼 수 있는 엔티티들 (플레이어 + 다른 NPC)
+  getVisibleEntities(npc: NpcEntity): { player: Entity | null; npcs: NpcEntity[] } {
+    const visionTiles = this.getVisionTiles(npc);
+
+    // 플레이어가 시야 내에 있는지
+    const playerVisible = visionTiles.some(
+      t => t.x === this.player.position.x && t.y === this.player.position.y
+    );
+
+    // 다른 NPC가 시야 내에 있는지
+    const visibleNpcs = this.npcs.filter(other =>
+      other.id !== npc.id &&
+      visionTiles.some(t => t.x === other.position.x && t.y === other.position.y)
+    );
+
+    return {
+      player: playerVisible ? this.player : null,
+      npcs: visibleNpcs,
+    };
+  }
+
   // NPC 방향 변경
   setNpcFacing(npcId: string, direction: Direction): void {
     const npc = this.npcs.find(n => n.id === npcId);

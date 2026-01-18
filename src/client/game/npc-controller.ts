@@ -8,8 +8,23 @@
  */
 
 import { NPCAgent, DailyPlanItem } from '../agent';
-import { GameWorld, Position, Direction } from './world';
+import { GameWorld, Position, Entity, NpcEntity, WorldObject } from './world';
 import { NpcDefinition, NpcState, LocationDef } from '../npcs/types';
+
+// 인식 캐시: 이미 본 것 추적 (델타 기반 관찰용)
+interface PerceptionCache {
+  // 엔티티: id → 마지막으로 본 위치 (변화 감지용)
+  seenEntities: Map<string, { x: number; y: number }>;
+  // 오브젝트: id → 마지막으로 본 상태
+  seenObjects: Map<string, string>;
+}
+
+// 인식 결과
+export interface PerceptionResult {
+  newEntities: Array<{ entity: Entity; description: string }>;
+  changedObjects: Array<{ object: WorldObject; description: string }>;
+  exitedEntities: Array<{ id: string; description: string }>;
+}
 
 export interface NpcControllerOptions {
   onLog?: (message: string, type: 'info' | 'success' | 'warning') => void;
@@ -24,6 +39,12 @@ export class NpcController {
   private state: NpcState = 'sleeping';
   private options: NpcControllerOptions;
   private currentTargetLocation: string | null = null;
+
+  // 인식 캐시 (델타 기반 관찰)
+  private perceptionCache: PerceptionCache = {
+    seenEntities: new Map(),
+    seenObjects: new Map(),
+  };
 
   constructor(
     definition: NpcDefinition,
@@ -262,6 +283,204 @@ export class NpcController {
     }
 
     return result;
+  }
+
+  // ============================================================
+  // 인식 시스템 (Perception)
+  // ============================================================
+
+  /**
+   * 시야 내 환경을 인식하고 변화를 감지
+   * - 새로 나타난 엔티티 (플레이어, 다른 NPC)
+   * - 상태가 변한 오브젝트
+   * - 시야에서 사라진 엔티티
+   */
+  perceive(): PerceptionResult {
+    const result: PerceptionResult = {
+      newEntities: [],
+      changedObjects: [],
+      exitedEntities: [],
+    };
+
+    // NPC 엔티티 가져오기
+    const npcEntity = this.world.getNpcs().find(n => n.id === this.definition.id);
+    if (!npcEntity) return result;
+
+    // 현재 시야 내 엔티티/오브젝트
+    const { player, npcs } = this.world.getVisibleEntities(npcEntity);
+    const visibleObjects = this.world.getVisibleObjects(npcEntity);
+
+    // 현재 보이는 엔티티 ID 세트
+    const currentlyVisible = new Set<string>();
+
+    // 1. 플레이어 인식
+    if (player) {
+      currentlyVisible.add(player.id);
+      const lastPos = this.perceptionCache.seenEntities.get(player.id);
+
+      if (!lastPos) {
+        // 새로 발견
+        const desc = this.describeEntity(player, '시야에 나타났다');
+        result.newEntities.push({ entity: player, description: desc });
+        this.perceptionCache.seenEntities.set(player.id, { ...player.position });
+      } else if (lastPos.x !== player.position.x || lastPos.y !== player.position.y) {
+        // 위치 변경 (선택적: 움직임 추적)
+        this.perceptionCache.seenEntities.set(player.id, { ...player.position });
+      }
+    }
+
+    // 2. 다른 NPC 인식
+    for (const otherNpc of npcs) {
+      currentlyVisible.add(otherNpc.id);
+      const lastPos = this.perceptionCache.seenEntities.get(otherNpc.id);
+
+      if (!lastPos) {
+        const desc = this.describeEntity(otherNpc, '시야에 나타났다');
+        result.newEntities.push({ entity: otherNpc, description: desc });
+        this.perceptionCache.seenEntities.set(otherNpc.id, { ...otherNpc.position });
+      } else if (lastPos.x !== otherNpc.position.x || lastPos.y !== otherNpc.position.y) {
+        this.perceptionCache.seenEntities.set(otherNpc.id, { ...otherNpc.position });
+      }
+    }
+
+    // 3. 시야에서 사라진 엔티티 감지
+    for (const [entityId, _pos] of this.perceptionCache.seenEntities) {
+      if (!currentlyVisible.has(entityId)) {
+        const desc = `${this.getEntityName(entityId)}이(가) 시야에서 사라졌다`;
+        result.exitedEntities.push({ id: entityId, description: desc });
+        this.perceptionCache.seenEntities.delete(entityId);
+      }
+    }
+
+    // 4. 오브젝트 상태 변화 감지
+    for (const obj of visibleObjects) {
+      const lastState = this.perceptionCache.seenObjects.get(obj.id);
+      const currentState = obj.state || '기본';
+
+      if (lastState === undefined) {
+        // 새로 발견한 오브젝트
+        const desc = this.describeObject(obj);
+        result.changedObjects.push({ object: obj, description: desc });
+        this.perceptionCache.seenObjects.set(obj.id, currentState);
+      } else if (lastState !== currentState) {
+        // 상태 변화
+        const desc = `${obj.name}의 상태가 '${lastState}'에서 '${currentState}'(으)로 바뀌었다`;
+        result.changedObjects.push({ object: obj, description: desc });
+        this.perceptionCache.seenObjects.set(obj.id, currentState);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 인식 결과를 메모리에 저장
+   */
+  async savePerceptions(result: PerceptionResult): Promise<void> {
+    const observations: string[] = [];
+
+    for (const { description } of result.newEntities) {
+      observations.push(description);
+    }
+    for (const { description } of result.changedObjects) {
+      observations.push(description);
+    }
+    for (const { description } of result.exitedEntities) {
+      observations.push(description);
+    }
+
+    // 관찰 내용이 있으면 메모리에 저장
+    for (const content of observations) {
+      this.agent.addObservation(content);
+      this.log(`👁️ ${content}`, 'info');
+    }
+  }
+
+  /**
+   * 인식 실행 + 메모리 저장 (한 번에)
+   */
+  async perceiveAndRemember(): Promise<PerceptionResult> {
+    const result = this.perceive();
+
+    if (result.newEntities.length > 0 ||
+        result.changedObjects.length > 0 ||
+        result.exitedEntities.length > 0) {
+      await this.savePerceptions(result);
+    }
+
+    return result;
+  }
+
+  // ============================================================
+  // 자연어 변환 헬퍼
+  // ============================================================
+
+  /**
+   * 엔티티를 자연어로 설명
+   * 예: "플레이어가 대장간 앞에서 시야에 나타났다"
+   */
+  private describeEntity(entity: Entity, action: string): string {
+    const name = entity.name || entity.id;
+    const location = this.getLocationName(entity.position);
+    return `${name}이(가) ${location}에서 ${action}`;
+  }
+
+  /**
+   * 오브젝트를 자연어로 설명
+   * 예: "모루가 사용 중이다"
+   */
+  private describeObject(obj: WorldObject): string {
+    if (obj.state) {
+      return `${obj.name}이(가) ${obj.state} 상태이다`;
+    }
+    return `${obj.name}이(가) 있다`;
+  }
+
+  /**
+   * 좌표를 장소명으로 변환
+   * 1. 영역(Area) 기반 매칭 (우선순위 높은 것 먼저)
+   * 2. 점(Point) 기반 매칭 (정확한 좌표 또는 ±1 범위)
+   */
+  private getLocationName(pos: Position): string {
+    // 1. 영역 기반 매칭 (areas가 정의된 경우)
+    if (this.definition.areas && this.definition.areas.length > 0) {
+      // 우선순위 내림차순 정렬
+      const sortedAreas = [...this.definition.areas].sort(
+        (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
+      );
+
+      for (const area of sortedAreas) {
+        if (pos.x >= area.minX && pos.x <= area.maxX &&
+            pos.y >= area.minY && pos.y <= area.maxY) {
+          return area.name;
+        }
+      }
+    }
+
+    // 2. 정확한 좌표 매칭
+    for (const [name, loc] of Object.entries(this.definition.locations)) {
+      if (loc.position.x === pos.x && loc.position.y === pos.y) {
+        return name;
+      }
+    }
+
+    // 3. 근처 (±1 타일) 매칭
+    for (const [name, loc] of Object.entries(this.definition.locations)) {
+      if (Math.abs(loc.position.x - pos.x) <= 1 && Math.abs(loc.position.y - pos.y) <= 1) {
+        return `${name} 근처`;
+      }
+    }
+
+    return `(${pos.x}, ${pos.y})`;
+  }
+
+  /**
+   * 엔티티 ID로 이름 가져오기
+   */
+  private getEntityName(entityId: string): string {
+    if (entityId === 'player') return '플레이어';
+    const npc = this.world.getNpcs().find(n => n.id === entityId);
+    return npc?.name || entityId;
   }
 
   // ============================================================

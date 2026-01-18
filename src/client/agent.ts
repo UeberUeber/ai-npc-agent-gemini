@@ -863,4 +863,16 @@ JSON 배열만 출력:`;
     }
     return this.scratch.dailyPlan[this.scratch.currentPlanIndex];
   }
+
+  /**
+   * 관찰 내용을 메모리에 추가 (외부에서 호출용)
+   * 예: "플레이어가 대장간 앞에서 시야에 나타났다"
+   */
+  addObservation(content: string, importance: number = 4): void {
+    this.memoryStore.add({
+      type: 'observation',
+      content,
+      importance,
+    });
+  }
 }

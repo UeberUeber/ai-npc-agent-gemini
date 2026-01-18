@@ -18,6 +18,7 @@ npm run dev
 
 | 기능 | 설명 |
 |------|------|
+| **Multi-NPC** | 다중 NPC 동시 활동 (대장장이 존, 여관주인 로사) - 각자 독립적 메모리/계획 |
 | **Persona** | NPC의 정체성 (이름, 나이, 직업, 성격, 배경, 목표, 말투) |
 | **Scratch** | NPC의 현재 상태 (위치, 활동, 기분, 시간) - 동적으로 변화 |
 | **Memory Stream** | 대화/관찰/감정변화를 시간순으로 localStorage에 저장 |
@@ -26,6 +27,7 @@ npm run dev
 | **Reflection** | 10회 대화마다 LLM으로 중요도 재평가 후 상위 수준 인사이트 생성 |
 | **Planning** | 지식 기반 하루 계획 생성 (Knowledge + Goals + Yesterday's Activities) |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
+| **Perception** | 시야 내 엔티티/오브젝트 감지 → 변화만 자연어로 메모리 저장 (델타 기반) |
 
 ## Architecture
 
@@ -91,7 +93,9 @@ npm run dev
 │   │   │                         # - retrieve(): 관련 기억 검색
 │   │   │                         # - updateImportance(): 중요도 갱신
 │   │   └── npcs/
-│   │       └── blacksmith_john.ts # 대장장이 NPC (Persona + Scratch)
+│   │       ├── blacksmith_john.ts # 대장장이 존 (Persona + Scratch + Knowledge)
+│   │       ├── innkeeper_rosa.ts  # 여관주인 로사 (Persona + Scratch + Knowledge)
+│   │       └── types.ts           # NPC 정의 타입 (NpcDefinition, WorldSetup 등)
 │   └── web/
 │       └── app.ts                # UI 컨트롤러
 │                                 # - DOM 이벤트 핸들링
@@ -402,6 +406,68 @@ type Intent = 'sell' | 'help' | 'refuse' | 'inquire' | 'share_story' | 'warn' | 
               다음 대화 프롬프트에 반영
 ```
 
+### 9. Perception System (환경 인식)
+
+NPC가 시야 내 환경을 인식하고, **변화만** 메모리에 저장합니다 (델타 기반).
+
+#### 인식 대상
+
+| 대상 | 감지 조건 | 저장 예시 |
+|------|----------|----------|
+| 플레이어 | 시야에 진입/퇴장 | "플레이어이(가) 대장간 근처에서 시야에 나타났다" |
+| 다른 NPC | 시야에 진입/퇴장 | "여관주인 로사이(가) 시야에서 사라졌다" |
+| 오브젝트 | 상태 변화 | "침대의 상태가 '비어있음'에서 '사용 중'으로 바뀌었다" |
+
+#### 델타 기반 (PerceptionCache)
+
+```typescript
+interface PerceptionCache {
+  seenEntities: Map<string, { x: number; y: number }>;  // 이미 본 엔티티
+  seenObjects: Map<string, string>;                      // 이미 본 오브젝트 상태
+}
+
+// 변화 감지 로직
+if (!lastPos) {
+  // 새로 발견 → 메모리 저장
+  "플레이어이(가) 대장간 근처에서 시야에 나타났다"
+} else if (lastPos !== currentPos) {
+  // 위치 변경 → 캐시만 업데이트 (저장 안 함)
+}
+```
+
+#### 자연어 변환
+
+좌표 기반 데이터를 자연어로 변환하여 저장합니다:
+
+```typescript
+// describeEntity(): 엔티티 → 자연어
+"플레이어이(가) 대장간 근처에서 시야에 나타났다"
+
+// describeObject(): 오브젝트 → 자연어
+"모루이(가) 사용 중 상태이다"
+
+// getLocationName(): 좌표 → 장소명
+{ x: 3, y: 3 } → "대장간 근처"
+```
+
+#### 인식 트리거
+
+```
+플레이어 이동
+    ↓
+모든 NPC의 perceiveAndRemember() 호출
+    ↓
+┌─────────────────────────────────────┐
+│ 1. perceive()                       │
+│    → 시야 내 엔티티/오브젝트 스캔   │
+│    → 캐시와 비교하여 변화 감지      │
+│                                     │
+│ 2. savePerceptions()                │
+│    → 자연어 변환                    │
+│    → observation으로 메모리 저장    │
+└─────────────────────────────────────┘
+```
+
 ## Conversation Flow
 
 ```
@@ -539,6 +605,31 @@ clear(): void
 ```
 
 ## Changelog
+
+### 2025-01-18 (UI/레이아웃 개선)
+- **게임 그리드 반응형 개선**: 지도가 화면에 스크롤 없이 꽉 차게 표시
+  - `height: calc(100vh - 320px)` 로 뷰포트 기준 크기 계산
+  - `aspect-ratio: 1` 유지하며 정사각형 그리드
+- **Perception 시스템 개선**: 플레이어 이동 시 NPC 인식 체크 추가
+  - `onPlayerMove` 콜백에서 모든 NPC의 `perceiveAndRemember()` 호출
+- **다중 NPC Controller**: 각 NPC별 독립적인 월드 배치 및 시야 관리
+
+### 2025-01-18 (다중 NPC 시스템)
+- **다중 NPC 지원**: 2명의 NPC가 동시에 활동
+  - 대장장이 존 (blacksmith_john): 마을 동쪽 대장간
+  - 여관주인 로사 (innkeeper_rosa): 마을 서쪽 여관
+  - 각 NPC별 독립적인 Agent, Controller, 메모리, 계획
+- **NPC 정의 구조화**: `NpcDefinition` 타입 도입
+  - Persona, Scratch, Knowledge, WorldSetup 통합 관리
+  - 장소 좌표 매핑 (`locations`)
+  - 월드 오브젝트/벽 배치 (`worldSetup`)
+- **Planning 시스템 툴팁 추가**: 계획 패널 제목 옆 ℹ️ 아이콘
+  - 호버 시 Planning 입력/출력/검색 방식 상세 설명
+  - LLM에게 전달되는 5가지 컨텍스트 설명
+  - 목표 관련 기억 검색 공식 (`score = recency + importance + relevance`)
+- **UI 개선**
+  - 계획 패널: 제목 고정, 목록만 스크롤
+  - 로사 전용 탭 UI (Scratch, 계획, 히스토리, 메모리)
 
 ### 2025-01-18 (Knowledge 시스템)
 - **세계 지식(Knowledge) 시스템 추가**: NPC가 알고 있는 세계 사실을 메모리에 저장

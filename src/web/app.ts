@@ -9,9 +9,14 @@
 import { gemini } from '../client/gemini';
 import { NPCAgent, DailyPlanItem } from '../client/agent';
 import { blacksmithJohn } from '../client/npcs/blacksmith_john';
+import { innkeeperRosa } from '../client/npcs/innkeeper_rosa';
+import { NpcDefinition } from '../client/npcs/types';
 import { GameWorld, Entity, TileInfo } from '../client/game/world';
 import { GameTime, GameTimeState } from '../client/game/time';
 import { NpcController } from '../client/game/npc-controller';
+
+// NPC 정의 목록
+const NPC_DEFINITIONS: NpcDefinition[] = [blacksmithJohn, innkeeperRosa];
 
 // DOM 요소
 const chatMessages = document.getElementById('chatMessages') as HTMLDivElement;
@@ -64,9 +69,12 @@ const planList = document.getElementById('planList') as HTMLDivElement;
 // 타일 정보 요소
 const tileInfoPanel = document.getElementById('tileInfo') as HTMLDivElement;
 
-// NPC Agent & Controller
-let agent: NPCAgent;
-let npcController: NpcController;
+// NPC Agent & Controller (다중 NPC 지원)
+const agents = new Map<string, NPCAgent>();
+const npcControllers = new Map<string, NpcController>();
+
+// 현재 선택된 NPC (대화 대상)
+let currentNpcId: string | null = null;
 
 // 게임 월드
 let gameWorld: GameWorld;
@@ -89,6 +97,18 @@ const moodKorean: Record<string, string> = {
 
 // 대화 카운터
 let chatCount = 0;
+
+// 현재 대화 중인 NPC의 Agent 가져오기
+function getCurrentAgent(): NPCAgent | null {
+  if (!currentNpcId) return null;
+  return agents.get(currentNpcId) || null;
+}
+
+// 현재 대화 중인 NPC의 Controller 가져오기
+function getCurrentController(): NpcController | null {
+  if (!currentNpcId) return null;
+  return npcControllers.get(currentNpcId) || null;
+}
 
 // 시스템 로그 추가
 function addLog(message: string, type: 'info' | 'success' | 'warning' = 'info') {
@@ -162,9 +182,11 @@ function hideTypingIndicator() {
   document.getElementById('typingIndicator')?.remove();
 }
 
-// 페르소나 UI 업데이트
+// 페르소나 UI 업데이트 (대장장이 존)
 function updatePersonaUI() {
-  const persona = agent.getPersona();
+  const johnAgent = agents.get('blacksmith_john');
+  if (!johnAgent) return;
+  const persona = johnAgent.getPersona();
   npcName.textContent = persona.name;
   npcAge.textContent = `${persona.age}세`;
   npcOccupation.textContent = persona.occupation;
@@ -173,17 +195,40 @@ function updatePersonaUI() {
   npcGoals.textContent = persona.currentGoals.join(' / ');
 }
 
-// Scratch(환경/상태) UI 업데이트
+// Scratch(환경/상태) UI 업데이트 (대장장이 존)
 function updateScratchUI() {
-  const scratch = agent.getScratch();
+  const johnAgent = agents.get('blacksmith_john');
+  if (!johnAgent) return;
+  const scratch = johnAgent.getScratch();
   npcLocation.textContent = scratch.currentLocation;
   npcActivity.textContent = scratch.currentActivity;
   npcMood.textContent = moodKorean[scratch.currentMood] || scratch.currentMood;
   npcTime.textContent = scratch.currentTime;
 }
 
-// 대화 히스토리 UI 업데이트
+// 로사 Scratch UI 업데이트
+function updateRosaScratchUI() {
+  const rosaAgent = agents.get('innkeeper_rosa');
+  if (!rosaAgent) return;
+  const scratch = rosaAgent.getScratch();
+  const rosaLocation = document.getElementById('rosaLocation');
+  const rosaActivity = document.getElementById('rosaActivity');
+  const rosaMood = document.getElementById('rosaMood');
+  const rosaTime = document.getElementById('rosaTime');
+  if (rosaLocation) rosaLocation.textContent = scratch.currentLocation;
+  if (rosaActivity) rosaActivity.textContent = scratch.currentActivity;
+  if (rosaMood) rosaMood.textContent = moodKorean[scratch.currentMood] || scratch.currentMood;
+  if (rosaTime) rosaTime.textContent = scratch.currentTime;
+}
+
+// 대화 히스토리 UI 업데이트 (현재 대화 중인 NPC)
 function updateHistoryUI() {
+  const agent = getCurrentAgent();
+  if (!agent) {
+    historyList.innerHTML = '<div class="empty-state">아직 대화가 없습니다</div>';
+    return;
+  }
+
   const history = agent.getConversationHistory();
 
   if (history.length === 0) {
@@ -277,10 +322,13 @@ function renderImportance(memory: { type: string; importance?: number }): string
   return `<div class="importance ${statusClass}">${displayText}${tooltip}</div>`;
 }
 
-// 메모리 스트림 UI 업데이트
+// 메모리 스트림 UI 업데이트 (대장장이 존)
 function updateMemoryUI() {
-  const memories = agent.getRecentMemories(10);
-  memoryCount.textContent = `${agent.getMemoryCount()}개`;
+  const johnAgent = agents.get('blacksmith_john');
+  if (!johnAgent) return;
+
+  const memories = johnAgent.getRecentMemories(10);
+  memoryCount.textContent = `${johnAgent.getMemoryCount()}개`;
 
   if (memories.length === 0) {
     memoryList.innerHTML = '<div class="empty-state">아직 기억이 없습니다</div>';
@@ -300,9 +348,113 @@ function updateMemoryUI() {
     .join('');
 }
 
-// 계획 패널 UI 업데이트
+// 로사 메모리 스트림 UI 업데이트
+function updateRosaMemoryUI() {
+  const rosaAgent = agents.get('innkeeper_rosa');
+  const rosaMemoryCount = document.getElementById('rosaMemoryCount');
+  const rosaMemoryList = document.getElementById('rosaMemoryList');
+  if (!rosaAgent || !rosaMemoryList || !rosaMemoryCount) return;
+
+  const memories = rosaAgent.getRecentMemories(10);
+  rosaMemoryCount.textContent = `${rosaAgent.getMemoryCount()}개`;
+
+  if (memories.length === 0) {
+    rosaMemoryList.innerHTML = '<div class="empty-state">아직 기억이 없습니다</div>';
+    return;
+  }
+
+  rosaMemoryList.innerHTML = memories
+    .map(
+      (m) => `
+      <div class="memory-item ${m.type === 'reflection' ? 'reflection' : ''}">
+        <div class="type">${m.type}</div>
+        <div>${m.content}</div>
+        ${renderImportance(m)}
+      </div>
+    `
+    )
+    .join('');
+}
+
+// 로사 대화 히스토리 UI 업데이트
+function updateRosaHistoryUI() {
+  const rosaAgent = agents.get('innkeeper_rosa');
+  const rosaHistoryList = document.getElementById('rosaHistoryList');
+  if (!rosaAgent || !rosaHistoryList) return;
+
+  const history = rosaAgent.getConversationHistory();
+
+  if (history.length === 0) {
+    rosaHistoryList.innerHTML = '<div class="empty-state">아직 대화가 없습니다</div>';
+    return;
+  }
+
+  rosaHistoryList.innerHTML = history
+    .slice(-10)
+    .map(
+      (msg) => `
+      <div class="memory-item">
+        <div class="type">${msg.speaker === 'user' ? '용사 스마게' : rosaAgent.getName()}</div>
+        <div>${msg.content}</div>
+      </div>
+    `
+    )
+    .join('');
+}
+
+// 로사 계획 패널 UI 업데이트
+function updateRosaPlanUI(day: number = 1) {
+  const rosaAgent = agents.get('innkeeper_rosa');
+  const rosaPlanSection = document.getElementById('rosaPlanSection') as HTMLDivElement;
+  const rosaPlanDay = document.getElementById('rosaPlanDay') as HTMLSpanElement;
+  const rosaPlanList = document.getElementById('rosaPlanList') as HTMLDivElement;
+  if (!rosaAgent || !rosaPlanSection || !rosaPlanDay || !rosaPlanList) return;
+
+  const plan = rosaAgent.getDailyPlan();
+
+  if (!plan || plan.length === 0) {
+    rosaPlanSection.style.display = 'none';
+    return;
+  }
+
+  rosaPlanSection.style.display = 'block';
+  rosaPlanDay.textContent = `${day}일차`;
+
+  const statusIcon = (status: DailyPlanItem['status']): string => {
+    switch (status) {
+      case 'completed': return '✅';
+      case 'in_progress': return '▶️';
+      case 'skipped': return '⏭️';
+      default: return '⏳';
+    }
+  };
+
+  rosaPlanList.innerHTML = plan
+    .map(
+      (item) => `
+      <div class="plan-item ${item.status}${item.goalRelated ? ' goal-related' : ''}">
+        <span class="plan-status">${statusIcon(item.status)}</span>
+        <span class="plan-time">${item.time}</span>
+        <span class="plan-activity">${item.activity}${item.goalRelated ? ' 🎯' : ''}</span>
+        ${item.location ? `<span class="plan-location">${item.location}</span>` : ''}
+      </div>
+    `
+    )
+    .join('');
+
+  // 현재 진행 중인 항목으로 스크롤
+  const inProgressItem = rosaPlanList.querySelector('.plan-item.in_progress');
+  if (inProgressItem) {
+    inProgressItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// 계획 패널 UI 업데이트 (대장장이 존)
 function updatePlanUI(day: number = 1) {
-  const plan = agent.getDailyPlan();
+  const johnAgent = agents.get('blacksmith_john');
+  if (!johnAgent) return;
+
+  const plan = johnAgent.getDailyPlan();
 
   if (!plan || plan.length === 0) {
     planSection.style.display = 'none';
@@ -347,11 +499,12 @@ function updateGameTimeUI(state: GameTimeState) {
   gameTimeDisplay.textContent = state.formatted;
   gamePeriod.textContent = state.periodKorean;
 
-  // NPC의 Scratch에 현재 시간 반영
-  if (agent) {
+  // 모든 NPC의 Scratch에 현재 시간 반영
+  for (const agent of agents.values()) {
     agent.updateScratch({ currentTime: state.formatted });
-    updateScratchUI();
   }
+  updateScratchUI();
+  updateRosaScratchUI();
 }
 
 // 타일 정보 UI 업데이트
@@ -420,8 +573,11 @@ function updateTileInfoUI(tileInfo: TileInfo) {
 function updateAllUI() {
   updatePersonaUI();
   updateScratchUI();
+  updateRosaScratchUI();
   updateHistoryUI();
+  updateRosaHistoryUI();
   updateMemoryUI();
+  updateRosaMemoryUI();
 }
 
 // 메시지 전송
@@ -430,8 +586,14 @@ async function sendMessage() {
   if (!message) return;
 
   // NPC 근처가 아니면 메시지 전송 불가
-  if (!nearbyNpc) {
+  if (!nearbyNpc || !currentNpcId) {
     addMessage('system', 'NPC 근처로 이동해야 대화할 수 있습니다.', '시스템');
+    return;
+  }
+
+  const agent = getCurrentAgent();
+  if (!agent) {
+    addMessage('system', 'NPC를 찾을 수 없습니다.', '시스템');
     return;
   }
 
@@ -446,11 +608,18 @@ async function sendMessage() {
     const response = await agent.chat(message);
     hideTypingIndicator();
     addMessage('npc', response, agent.getName());
-    chatCount = agent.getChatCount(); // Agent의 카운트와 동기화
+    chatCount = agent.getChatCount();
     updateChatCounter();
-    updateScratchUI(); // 감정 변화 반영
-    updateHistoryUI();
-    updateMemoryUI();
+    // 해당 NPC UI 업데이트
+    if (currentNpcId === 'blacksmith_john') {
+      updateScratchUI();
+      updateMemoryUI();
+      updateHistoryUI();
+    } else if (currentNpcId === 'innkeeper_rosa') {
+      updateRosaScratchUI();
+      updateRosaMemoryUI();
+      updateRosaHistoryUI();
+    }
   } catch (error) {
     hideTypingIndicator();
     console.error('대화 오류:', error);
@@ -464,13 +633,16 @@ async function sendMessage() {
 
 // 메모리 초기화
 function clearMemory() {
-  if (confirm('모든 메모리를 삭제하시겠습니까?')) {
-    agent.clearAllMemories();
+  if (confirm('모든 NPC의 메모리를 삭제하시겠습니까?')) {
+    for (const agent of agents.values()) {
+      agent.clearAllMemories();
+    }
     chatMessages.innerHTML = '';
     chatCount = 0;
     updateChatCounter();
     updateHistoryUI();
     updateMemoryUI();
+    updateRosaMemoryUI();
     addMessage('system', '메모리가 초기화되었습니다.', '시스템');
     addLog('메모리 및 대화 기록 초기화됨', 'warning');
   }
@@ -497,29 +669,41 @@ function submitApiKey() {
   initChat();
 }
 
-// NPC 기상 (하루 시작)
+// 모든 NPC 기상 (하루 시작)
 async function npcWakeUp(day: number) {
-  try {
-    await npcController.wakeUp(day);
-    updatePlanUI(day);
-    updateScratchUI();
-    updateMemoryUI();
-  } catch (error) {
-    console.error('NPC 기상 오류:', error);
-    addLog('⚠️ 계획 생성 실패', 'warning');
+  for (const [npcId, controller] of npcControllers.entries()) {
+    try {
+      await controller.wakeUp(day);
+      addLog(`${npcId} 기상 완료`, 'info');
+    } catch (error) {
+      console.error(`NPC ${npcId} 기상 오류:`, error);
+      addLog(`⚠️ ${npcId} 계획 생성 실패`, 'warning');
+    }
   }
+  updatePlanUI(day);
+  updateRosaPlanUI(day);
+  updateScratchUI();
+  updateRosaScratchUI();
+  updateMemoryUI();
+  updateRosaMemoryUI();
 }
 
-// NPC 취침 (하루 종료)
+// 모든 NPC 취침 (하루 종료)
 async function npcSleep() {
-  try {
-    await npcController.sleep();
-    updatePlanUI();
-    updateScratchUI();
-    updateMemoryUI();
-  } catch (error) {
-    console.error('NPC 취침 오류:', error);
+  for (const [npcId, controller] of npcControllers.entries()) {
+    try {
+      await controller.sleep();
+      addLog(`${npcId} 취침 완료`, 'info');
+    } catch (error) {
+      console.error(`NPC ${npcId} 취침 오류:`, error);
+    }
   }
+  updatePlanUI();
+  updateRosaPlanUI();
+  updateScratchUI();
+  updateRosaScratchUI();
+  updateMemoryUI();
+  updateRosaMemoryUI();
 }
 
 // 게임 시간 초기화
@@ -532,28 +716,33 @@ function initGameTime() {
     onTimeChange: (state) => {
       updateGameTimeUI(state);
 
-      // 계획 진행 상황 업데이트 (NpcController가 이동도 처리)
-      if (npcController) {
-        const result = npcController.updatePlanProgress(state.formatted24);
+      // 모든 NPC의 계획 진행 상황 업데이트
+      for (const [npcId, controller] of npcControllers.entries()) {
+        const result = controller.updatePlanProgress(state.formatted24);
         if (result.changed && result.newActivity) {
-          updatePlanUI(state.day);
-          updateScratchUI();
+          if (npcId === 'blacksmith_john') {
+            updatePlanUI(state.day);
+            updateScratchUI();
+          } else if (npcId === 'innkeeper_rosa') {
+            updateRosaPlanUI(state.day);
+            updateRosaScratchUI();
+          }
         }
       }
     },
     onPeriodChange: (_period, state) => {
       addLog(`시간대 변경: ${state.periodKorean}`, 'info');
 
-      // 22:00 취침, 06:00 기상 체크
+      // 22:00 취침 체크
       const hour = state.hour;
-      if (hour === 22 && agent) {
+      if (hour === 22 && agents.size > 0) {
         npcSleep();
       }
     },
     onDayChange: (day, _state) => {
       addLog(`🌅 ${day}일차 시작!`, 'success');
-      // 새 날 시작 시 NPC 기상
-      if (agent) {
+      // 새 날 시작 시 모든 NPC 기상
+      if (agents.size > 0) {
         npcWakeUp(day);
       }
     },
@@ -569,28 +758,31 @@ function initGameTime() {
 
 // 채팅 초기화
 async function initChat() {
-  // NPC 정의에서 Agent 생성
-  const npcDef = blacksmithJohn;
-  agent = new NPCAgent(npcDef.persona, npcDef.scratch);
-
-  // 세계 지식 시드 (NPC가 아는 장소, 도구, 가능한 활동)
-  agent.seedKnowledge(npcDef.knowledge);
-
-  // 게임 월드 초기화 (GameTime 포함) - NpcController보다 먼저
+  // 게임 시간 초기화 - NPC 생성보다 먼저
   initGameTime();
 
+  // 게임 월드 초기화 (15x12 맵)
   gameWorld = new GameWorld(gameGrid, gameStatus, {
-    gridSize: 10,
+    gridSize: 15, // 확장된 맵 크기
     onPlayerMove: (_position, npc) => {
       nearbyNpc = npc;
       if (npc) {
+        // 근처 NPC를 현재 대화 대상으로 설정
+        currentNpcId = npc.id;
         userInput.placeholder = `${npc.name}에게 말하기... (근처에 있음!)`;
       } else {
+        currentNpcId = null;
         userInput.placeholder = 'NPC 근처로 이동하세요...';
+      }
+
+      // 플레이어 이동 시 모든 NPC의 인식 체크
+      for (const controller of npcControllers.values()) {
+        controller.perceiveAndRemember();
       }
     },
     onNpcInteract: (npc) => {
       if (npc) {
+        currentNpcId = npc.id;
         userInput.focus();
         addLog(`${npc.name}과 대화 시작`, 'info');
       }
@@ -600,17 +792,32 @@ async function initChat() {
     },
   });
 
-  // 플레이어 시작 위치
-  gameWorld.setPlayerPosition(5, 7);
+  // 플레이어 시작 위치 (맵 중앙)
+  gameWorld.setPlayerPosition(7, 5);
 
-  // NpcController 생성 및 월드 배치
-  npcController = new NpcController(npcDef, agent, gameWorld, {
-    onLog: (message, type) => {
-      addLog(message, type);
-      updateMemoryUI();
-    },
-  });
-  npcController.setupWorld();
+  // 모든 NPC에 대해 Agent와 Controller 생성
+  for (const npcDef of NPC_DEFINITIONS) {
+    // Agent 생성
+    const agent = new NPCAgent(npcDef.persona, npcDef.scratch);
+    agent.seedKnowledge(npcDef.knowledge);
+    agents.set(npcDef.id, agent);
+
+    // Controller 생성 및 월드 배치
+    const controller = new NpcController(npcDef, agent, gameWorld, {
+      onLog: (message, type) => {
+        addLog(message, type);
+        if (npcDef.id === 'blacksmith_john') {
+          updateMemoryUI();
+        } else if (npcDef.id === 'innkeeper_rosa') {
+          updateRosaMemoryUI();
+        }
+      },
+    });
+    controller.setupWorld();
+    npcControllers.set(npcDef.id, controller);
+
+    addLog(`${npcDef.persona.name} 로드됨 (메모리: ${agent.getMemoryCount()}개)`, 'info');
+  }
 
   addLog('게임 월드 초기화 완료', 'success');
 
@@ -622,24 +829,14 @@ async function initChat() {
   // 시스템 로그 초기화
   systemLog.innerHTML = '';
   addLog('NPC Agent 초기화 완료', 'success');
-  addLog(`대장장이 존 로드됨 (메모리: ${agent.getMemoryCount()}개)`, 'info');
+  addLog(`${NPC_DEFINITIONS.length}명의 NPC 로드됨`, 'info');
 
-  // NPC 기상 및 하루 계획 생성 (게임 시작 = 06:00)
+  // 모든 NPC 기상 및 하루 계획 생성 (게임 시작 = 06:00)
   await npcWakeUp(gameTime.getState().day);
 
-  // NPC 근처가 아니면 인사 건너뜀
-  if (!nearbyNpc) {
-    addMessage('system', 'NPC 근처로 이동하면 대화할 수 있습니다. (WASD/방향키/클릭)', '시스템');
-    userInput.placeholder = 'NPC 근처로 이동하세요...';
-  } else {
-    // LLM으로 첫 인사 생성
-    addLog('LLM 인사 생성 중...', 'info');
-    showTypingIndicator();
-    const greeting = await agent.greet();
-    hideTypingIndicator();
-    addMessage('npc', greeting, agent.getName());
-    addLog('인사 생성 완료', 'success');
-  }
+  // 안내 메시지
+  addMessage('system', 'NPC 근처로 이동하면 대화할 수 있습니다. (WASD/방향키)', '시스템');
+  userInput.placeholder = 'NPC 근처로 이동하세요...';
 
   userInput.focus();
 }

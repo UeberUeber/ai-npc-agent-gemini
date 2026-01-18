@@ -80,17 +80,18 @@
     .left-panel .panel-content {
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
     .game-world {
       display: flex;
       flex-direction: column;
-      align-items: center;
+      align-items: flex-start;
       justify-content: flex-start;
-      height: 100%;
-      gap: 16px;
-      overflow-y: auto;
-      padding: 16px 0;
+      flex: 1;
+      gap: 12px;
+      padding: 4px 0;
+      min-height: 0;
     }
 
     .game-time {
@@ -123,15 +124,17 @@
     /* ===== 타일 시스템 ===== */
     .game-grid {
       display: grid;
-      grid-template-columns: repeat(10, 1fr);
-      grid-template-rows: repeat(10, 1fr);
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
       gap: 2px;
       background: #1a1a2e;
       padding: 6px;
       border-radius: 8px;
       aspect-ratio: 1;
-      width: 100%;
-      max-width: 250px;
+      /* 높이 기준으로 정사각형 크기 계산 (뷰포트 높이 - 헤더/푸터 여백) */
+      height: calc(100vh - 320px);
+      width: auto;
+      max-width: 100%;
     }
 
     /* 기본 타일 - 잔디 */
@@ -806,6 +809,104 @@
       color: #f59e0b;
     }
 
+    /* 정보 아이콘 툴팁 (Planning 등) */
+    .info-icon {
+      position: relative;
+      cursor: help;
+      font-size: 0.85rem;
+      margin-left: 4px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .info-icon:hover {
+      opacity: 1;
+    }
+
+    .info-tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: calc(100% + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 360px;
+      padding: 16px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      transition: opacity 0.2s, visibility 0.2s;
+      text-align: left;
+      font-style: normal;
+      font-weight: normal;
+      line-height: 1.5;
+    }
+
+    .info-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: #1e293b;
+    }
+
+    .info-icon:hover .info-tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .info-tooltip h4 {
+      color: #60a5fa;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-tooltip p {
+      color: #d1d5db;
+      font-size: 0.8rem;
+      margin-bottom: 12px;
+    }
+
+    .info-tooltip .section {
+      margin-bottom: 12px;
+    }
+
+    .info-tooltip .section-title {
+      color: #f59e0b;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-tooltip .section-content {
+      color: #9ca3af;
+      font-size: 0.78rem;
+    }
+
+    .info-tooltip .input-item {
+      margin: 4px 0;
+      padding-left: 8px;
+      border-left: 2px solid rgba(96, 165, 250, 0.3);
+    }
+
+    .info-tooltip code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.75rem;
+      color: #fcd34d;
+    }
+
     /* 패널 리사이저 */
     .resizer {
       width: 8px;
@@ -858,14 +959,28 @@
 
     /* 계획 패널 */
     .plan-section {
-      max-height: 250px;
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      max-height: 280px;
+      overflow: hidden;
+    }
+
+    .plan-section h3 {
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      background: #1e293b;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+      z-index: 1;
     }
 
     .plan-list {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      overflow-y: auto;
+      flex-grow: 1;
     }
 
     .plan-item {
@@ -1202,10 +1317,13 @@
       <!-- 캐릭터 탭 -->
       <div class="character-tabs">
         <button class="character-tab active" id="tabNpc" data-tab="npc">
-          <span class="tab-icon">👨‍🔧</span>대장장이 존
+          <span class="tab-icon">👨‍🔧</span>존
+        </button>
+        <button class="character-tab" id="tabRosa" data-tab="rosa">
+          <span class="tab-icon">👩‍🍳</span>로사
         </button>
         <button class="character-tab player-tab" id="tabPlayer" data-tab="player">
-          <span class="tab-icon">🦸</span>용사 스마게
+          <span class="tab-icon">🦸</span>플레이어
         </button>
       </div>
       <div class="panel-content">
@@ -1263,7 +1381,63 @@
 
           <!-- 오늘의 계획 (Planning) -->
           <div class="npc-info plan-section" id="planSection" style="display: none;">
-            <h3>📋 오늘의 계획 (Planning) <span id="planDay" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">1일차</span></h3>
+            <h3>📋 오늘의 계획 (Planning)
+              <span class="info-icon">ℹ️
+                <div class="info-tooltip planning-tooltip">
+                  <h4>🗓️ Planning 시스템</h4>
+                  <p>Stanford Generative Agents 논문 기반. <strong>매일 기상 시 LLM이 하루 계획을 생성</strong>합니다.</p>
+
+                  <div class="section">
+                    <div class="section-title">📥 입력 (LLM에게 전달)</div>
+                    <div class="section-content">
+                      <div class="input-item">1. <strong>Agent Summary</strong> - 페르소나 + 현재 목표</div>
+                      <div class="input-item">2. <strong>World Knowledge</strong> - 알고 있는 장소/도구</div>
+                      <div class="input-item">3. <strong>Recent Observations</strong> - 최근 중요한 일 (importance≥7)</div>
+                      <div class="input-item">4. <strong>Yesterday's Activities</strong> - 어제 활동 기록</div>
+                      <div class="input-item">5. <strong>Goal-related Memories</strong> - 목표 키워드로 검색한 기억 3개</div>
+                    </div>
+                  </div>
+
+                  <div class="section">
+                    <div class="section-title">🔍 목표 관련 기억 검색</div>
+                    <div class="section-content">
+                      목표 문자열을 공백으로 분리 → 키워드 매칭<br>
+                      <code>score = recency + importance + relevance</code><br>
+                      • recency: 최근 접근한 기억일수록 높음<br>
+                      • importance: 중요도/10 (미평가 시 0.5)<br>
+                      • relevance: 키워드 매칭 비율
+                    </div>
+                  </div>
+
+                  <div class="section">
+                    <div class="section-title">📤 출력</div>
+                    <div class="section-content">
+                      06:00~22:00 시간대별 활동 JSON 배열<br>
+                      각 항목: time, activity, location, duration, goalRelated
+                    </div>
+                  </div>
+
+                  <div class="section">
+                    <div class="section-title">⏰ 시간 진행</div>
+                    <div class="section-content">
+                      GameTime이 매 시간 변경 시 <code>updatePlanProgress()</code> 호출<br>
+                      현재 시간에 맞는 계획으로 상태 전이<br>
+                      pending → in_progress → completed
+                    </div>
+                  </div>
+
+                  <div class="section">
+                    <div class="section-title">⚠️ 제한사항</div>
+                    <div class="section-content">
+                      • 대화 히스토리는 Planning에 포함 안 됨<br>
+                      • 목표 검색은 단순 키워드 매칭 (의미적 유사성 X)<br>
+                      • 🎯 표시 = 목표 관련 활동
+                    </div>
+                  </div>
+                </div>
+              </span>
+              <span id="planDay" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">1일차</span>
+            </h3>
             <div class="plan-list" id="planList">
               <!-- 계획 아이템들이 JS로 추가됨 -->
             </div>
@@ -1293,6 +1467,87 @@
             <h3>시스템 로그 <span id="chatCounter" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">대화: 0/10</span></h3>
             <div class="log-list" id="systemLog">
               <div class="log-item info">시스템 초기화 대기중...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- === 여관주인 로사 탭 === -->
+        <div class="character-content" id="contentRosa">
+          <!-- 페르소나 -->
+          <div class="npc-info">
+            <h3>페르소나 (Persona)</h3>
+            <div class="npc-stat">
+              <span class="label">이름</span>
+              <span class="value" id="rosaName">여관주인 로사</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">나이</span>
+              <span class="value" id="rosaAge">38세</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">직업</span>
+              <span class="value" id="rosaOccupation">여관주인</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">성격</span>
+              <span class="value" id="rosaTraits">친절함, 수다스러움, 정보통, 요리솜씨</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">배경</span>
+              <span class="value" id="rosaBackstory" style="font-size: 0.8rem;">15년 전 남편과 함께 붉은 달 여관을 열었다. 5년 전 남편이 병으로 세상을 떠난 후 혼자 여관을 운영 중.</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">목표</span>
+              <span class="value" id="rosaGoals" style="font-size: 0.8rem;">새로운 요리 레시피 개발, 여관 2층 수리</span>
+            </div>
+          </div>
+
+          <!-- 환경/현재상태 (Scratch) -->
+          <div class="npc-info">
+            <h3>환경/상태 (Scratch)</h3>
+            <div class="npc-stat">
+              <span class="label">위치</span>
+              <span class="value" id="rosaLocation">-</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">활동</span>
+              <span class="value" id="rosaActivity">-</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">기분</span>
+              <span class="value" id="rosaMood">-</span>
+            </div>
+            <div class="npc-stat">
+              <span class="label">시간</span>
+              <span class="value" id="rosaTime">-</span>
+            </div>
+          </div>
+
+          <!-- 오늘의 계획 (Planning) -->
+          <div class="npc-info plan-section" id="rosaPlanSection" style="display: none;">
+            <h3>📋 오늘의 계획 (Planning)
+              <span id="rosaPlanDay" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">1일차</span>
+            </h3>
+            <div class="plan-list" id="rosaPlanList">
+              <!-- 계획 아이템들이 JS로 추가됨 -->
+            </div>
+          </div>
+
+          <!-- 대화 히스토리 -->
+          <div class="memory-section">
+            <h3>대화 히스토리 (History)</h3>
+            <div class="memory-list" id="rosaHistoryList">
+              <div class="empty-state">아직 대화가 없습니다</div>
+            </div>
+          </div>
+
+          <!-- 메모리 스트림 -->
+          <div class="memory-section">
+            <h3>
+              메모리 스트림 (Memory) <span id="rosaMemoryCount" style="color: #6b7280; font-weight: normal;">0개</span>
+            </h3>
+            <div class="memory-list" id="rosaMemoryList">
+              <div class="empty-state">아직 기억이 없습니다</div>
             </div>
           </div>
         </div>
@@ -1449,9 +1704,12 @@
           // 모든 콘텐츠 숨김
           contents.forEach(c => c.classList.remove('active'));
           // 해당 콘텐츠 표시
-          const targetContent = document.getElementById(
-            targetTab === 'npc' ? 'contentNpc' : 'contentPlayer'
-          );
+          const contentMap = {
+            'npc': 'contentNpc',
+            'rosa': 'contentRosa',
+            'player': 'contentPlayer'
+          };
+          const targetContent = document.getElementById(contentMap[targetTab]);
           if (targetContent) {
             targetContent.classList.add('active');
           }
