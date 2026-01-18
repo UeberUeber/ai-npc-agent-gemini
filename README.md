@@ -27,6 +27,9 @@ npm run dev
 | **Reflection** | 10회 대화마다 LLM으로 중요도 재평가 후 상위 수준 인사이트 생성 |
 | **Planning** | 지식 기반 하루 계획 생성 (Knowledge + Goals + Yesterday's Activities) |
 | **Autonomous Speech** | 플레이어 감지 시 NPC가 먼저 말 걸기 (논문: Reaction & Dialogue System) |
+| **NPC-NPC Dialogue** | NPC끼리 시야에서 만나면 3턴 대화 (쿨다운 60초) |
+| **Conversation State** | 대화 시작 시 이동 정지 → 대화 종료 후 이동 재개 |
+| **Thought Memory** | 내적 판단/혼잣말을 thought 타입으로 메모리에 저장 |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
 | **Perception** | 시야 내 엔티티/오브젝트 감지 → 변화만 자연어로 메모리 저장 (델타 기반) |
 
@@ -144,7 +147,7 @@ type MoodType = 'happy' | 'neutral' | 'sad' | 'angry' | 'fearful' | 'excited' | 
 ```typescript
 interface Memory {
   id: string;                 // "m001", "m002", ...
-  type: MemoryType;           // 'observation' | 'reflection' | 'knowledge' | 'plan'
+  type: MemoryType;           // 'observation' | 'reflection' | 'knowledge' | 'plan' | 'thought'
   content: string;            // "손님이 말했다: '검이 필요해'"
   timestamp: string;          // ISO 8601 형식
   importance: number;         // 1-10 (기본값 5, LLM이 재평가)
@@ -182,6 +185,7 @@ interface Memory {
 | `reflection` | 10회 대화마다 | 8 (고정) | "손님들은 주로 무기를 원한다" |
 | `knowledge` | 초기화 시 1회 | 7 (고정) | "대장간에 모루가 있다" |
 | `plan` | 매일 06:00 기상 시 | 6 (기본) | "오전에 검 제작, 오후에 손님 응대" |
+| `thought` | 내적 판단/혼잣말 시 | 3-5 | "슬슬 가봐야겠는데..." |
 
 #### 검색 시 동작
 
@@ -777,6 +781,37 @@ clear(): void
 ```
 
 ## Changelog
+
+### 2025-01-18 (대화 시스템 고도화)
+- **NPC-NPC 대화 시스템**: NPC끼리 시야에서 만나면 자동 대화
+  - 3턴 대화 (인사 → 응답 → 마무리)
+  - 양방향 쿨다운 60초 (같은 NPC 쌍은 1분간 재대화 안 함)
+  - `initiateNpcConversation()`, `respondToNpc()` 메서드
+- **대화 중 이동 정지**: `conversing` 상태 추가
+  - `startConversation()`: 이동 중지, 이전 상태 저장
+  - `endConversation()`: 이전 상태 복원, 이동 재개
+  - `moveTo()`: 대화 중이면 이동 차단 (목적지만 저장)
+- **Thought 메모리 타입**: 내적 판단/혼잣말 저장
+  - `MemoryType`에 `thought` 추가
+  - `addThought()`: 내적 판단 저장
+  - `shouldContinueConversation()`: 대화 계속 여부 LLM 판단
+  - `generateSelfTalk()`: 혼자 있을 때 혼잣말 생성 (20% 확률)
+  - UI에 파란색 이탤릭으로 표시
+- **플레이어 자율 발화 쿨다운**: 30초 쿨다운 추가 (반복 인사 방지)
+- **자율 발화 반복 방지**: 이전 발화 검색 후 "같은 말 하지 마" 지시
+
+### 2025-01-18 (UI 개선: 스크롤/아이콘/시간 컨트롤)
+- **메모리 스트림 스크롤 추가**: 메모리가 많아지면 스크롤로 탐색
+  - `.memory-list`에 `max-height: 200px`, `overflow-y: auto` 적용
+- **대화 아이콘 NPC별 분기**: 망치(🔨) 대신 화자별 아이콘 표시
+  - 대장장이 존: 👨‍🔧
+  - 여관주인 로사: 👩‍🍳
+  - 플레이어: 🦸
+  - 시스템: ⚙️
+- **시간 일시정지 버튼 추가**: 타이머 옆 ⏸️/▶️ 토글 버튼
+  - 클릭 시 게임 시간 멈춤/재개
+  - 일시정지 상태에서 빨간색 배경으로 표시
+  - NPC 이동도 함께 멈춤 (틱 기반)
 
 ### 2025-01-18 (README 개선: Memory System 설명)
 - **Memory Type 위계 다이어그램 추가**: observation, reflection, knowledge, plan이 동일 계층임을 시각화

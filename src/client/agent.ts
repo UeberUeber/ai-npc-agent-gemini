@@ -919,10 +919,13 @@ YES 또는 NO만 답하세요:`;
    * 자발적 발화 생성 (논문: "Dialogue Generation - Turn 1")
    */
   async generateSpontaneousUtterance(observation: string): Promise<string> {
-    // 플레이어 관련 기억 검색 (이전 대화, 이전 자율 발화 포함)
-    const playerMemories = this.memoryStore.retrieve('플레이어 대화', 5);
-    // 이전 자율 발화 기억 검색
+    // 이전 자율 발화 기억 검색 (중복 인사 방지용)
     const previousUtterances = this.memoryStore.retrieve('플레이어에게 먼저 말을 걸었다', 3);
+    // 최근 대화 히스토리 (실제 대화만 - 인식 기록 제외)
+    const recentHistory = this.conversationHistory.slice(-6);
+    const historyText = recentHistory.length > 0
+      ? recentHistory.map(m => `${m.speaker === 'user' ? '플레이어' : '나'}: ${m.content}`).join('\n')
+      : '(아직 대화 없음)';
 
     const prompt = `## 당신의 정체
 이름: ${this.persona.name}
@@ -937,8 +940,8 @@ YES 또는 NO만 답하세요:`;
 ## 상황
 ${observation}
 
-## 플레이어와의 기억
-${playerMemories.map(m => `- ${m.content}`).join('\n') || '(없음)'}
+## 최근 대화 히스토리
+${historyText}
 
 ## 이전에 플레이어에게 한 인사
 ${previousUtterances.map(m => `- ${m.content}`).join('\n') || '(없음)'}
@@ -948,6 +951,7 @@ ${previousUtterances.map(m => `- ${m.content}`).join('\n') || '(없음)'}
 - 1-2문장으로 짧게
 - 말투: ${this.persona.speechStyle}
 - 현재 하던 일을 하면서 말하는 것처럼
+- **중요**: 최근 대화 내용을 고려하세요. 플레이어가 이미 거절한 것을 다시 권유하지 마세요.
 - **중요**: 위 "이전에 플레이어에게 한 인사"와 같거나 비슷한 말은 절대 하지 마세요. 완전히 다른 인사를 하세요.
 - 대화 내용만 출력 (행동 묘사나 따옴표 없이)`;
 

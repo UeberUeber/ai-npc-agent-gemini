@@ -1634,6 +1634,17 @@
             </div>
           </div>
         </div>
+
+        <!-- === 시스템 탭 === -->
+        <div class="character-content" id="contentSystem">
+          <!-- 시스템 로그 -->
+          <div class="memory-section">
+            <h3>시스템 로그 <span id="chatCounter" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">대화: 0/10</span></h3>
+            <div class="log-list" id="systemLog">
+              <div class="log-item info">시스템 초기화 대기중...</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1737,7 +1748,8 @@
           const contentMap = {
             'npc': 'contentNpc',
             'rosa': 'contentRosa',
-            'player': 'contentPlayer'
+            'player': 'contentPlayer',
+            'system': 'contentSystem'
           };
           const targetContent = document.getElementById(contentMap[targetTab]);
           if (targetContent) {
