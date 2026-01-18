@@ -918,7 +918,10 @@ YES 또는 NO만 답하세요:`;
    * 자발적 발화 생성 (논문: "Dialogue Generation - Turn 1")
    */
   async generateSpontaneousUtterance(observation: string): Promise<string> {
-    const memories = this.memoryStore.retrieve(observation, 5);
+    // 플레이어 관련 기억 검색 (이전 대화, 이전 자율 발화 포함)
+    const playerMemories = this.memoryStore.retrieve('플레이어 대화', 5);
+    // 이전 자율 발화 기억 검색
+    const previousUtterances = this.memoryStore.retrieve('플레이어에게 먼저 말을 걸었다', 3);
 
     const prompt = `## 당신의 정체
 이름: ${this.persona.name}
@@ -933,14 +936,18 @@ YES 또는 NO만 답하세요:`;
 ## 상황
 ${observation}
 
-## 관련 기억
-${memories.map(m => `- ${m.content}`).join('\n') || '(없음)'}
+## 플레이어와의 기억
+${playerMemories.map(m => `- ${m.content}`).join('\n') || '(없음)'}
+
+## 이전에 플레이어에게 한 인사
+${previousUtterances.map(m => `- ${m.content}`).join('\n') || '(없음)'}
 
 ## 지시
 위 상황에서 플레이어에게 먼저 말을 거세요.
 - 1-2문장으로 짧게
 - 말투: ${this.persona.speechStyle}
 - 현재 하던 일을 하면서 말하는 것처럼
+- **중요**: 위 "이전에 플레이어에게 한 인사"와 같거나 비슷한 말은 절대 하지 마세요. 완전히 다른 인사를 하세요.
 - 대화 내용만 출력 (행동 묘사나 따옴표 없이)`;
 
     try {

@@ -49,9 +49,16 @@ export class NpcController {
     seenObjects: new Map(),
   };
 
-  // NPC간 대화 추적 (중복 방지)
-  private recentNpcConversations: Map<string, number> = new Map();  // npcId → timestamp
+  // NPC간 대화 추적 (중복 방지) - static으로 모든 컨트롤러가 공유
+  private static globalConversationCooldowns: Map<string, number> = new Map();  // "npcA_npcB" → timestamp
   private static NPC_CONVERSATION_COOLDOWN = 60000;  // 1분 쿨다운
+
+  /**
+   * 두 NPC간 대화 키 생성 (정렬하여 양방향 동일 키)
+   */
+  private getConversationKey(npcId1: string, npcId2: string): string {
+    return [npcId1, npcId2].sort().join('_');
+  }
 
   constructor(
     definition: NpcDefinition,
@@ -485,8 +492,9 @@ export class NpcController {
    * NPC간 대화 시도
    */
   private async tryConversationWithNpc(targetId: string, targetName: string, observation: string): Promise<void> {
-    // 쿨다운 체크 (최근에 대화했으면 스킵)
-    const lastConvo = this.recentNpcConversations.get(targetId);
+    // 쿨다운 체크 - 양방향 공유 키 사용 (Rosa↔John 동일 키)
+    const convoKey = this.getConversationKey(this.definition.id, targetId);
+    const lastConvo = NpcController.globalConversationCooldowns.get(convoKey);
     if (lastConvo && Date.now() - lastConvo < NpcController.NPC_CONVERSATION_COOLDOWN) {
       return;
     }
@@ -516,8 +524,8 @@ export class NpcController {
       this.log(`💬 "${utterance3.slice(0, 30)}..."`, 'info');
     }
 
-    // 쿨다운 기록
-    this.recentNpcConversations.set(targetId, Date.now());
+    // 쿨다운 기록 (공유 맵에 저장)
+    NpcController.globalConversationCooldowns.set(convoKey, Date.now());
     this.log(`✅ ${targetName}과(와) 대화 완료`, 'success');
   }
 
