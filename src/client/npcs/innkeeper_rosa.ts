@@ -28,7 +28,7 @@ export const innkeeperScratch: Scratch = {
   currentLocation: '집',
   currentActivity: '잠자는 중',
   currentMood: 'neutral',
-  currentTime: '06:00',
+  currentTime: '06:15',
   isAwake: false,
 };
 

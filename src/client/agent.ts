@@ -624,7 +624,7 @@ ${p.backstory}`;
   /**
    * NPC 기상 - 하루 계획 생성
    */
-  async wakeUp(currentTime: string = '06:00'): Promise<DailyPlanItem[]> {
+  async wakeUp(currentTime: string = '06:15'): Promise<DailyPlanItem[]> {
     this.scratch.isAwake = true;
     this.scratch.currentTime = currentTime;
     this.log('☀️ 기상! 하루 계획 생성 중...', 'info');
@@ -745,14 +745,14 @@ ${memoryContext}
    - 목표: ${p.currentGoals.join(', ')}
 
 ### 계획 조건
-- 06:00 기상부터 22:00 취침까지
+- 06:15 기상부터 22:00 취침까지
 - ${p.occupation}의 일과에 맞게
 - 각 활동은 30분~2시간 단위
 
 ## 출력 형식
 반드시 다음 JSON 배열로만 출력하세요:
 [
-  {"time": "06:00", "activity": "활동 내용", "location": "장소", "duration": 60, "goalRelated": true},
+  {"time": "06:15", "activity": "활동 내용", "location": "장소", "duration": 60, "goalRelated": true},
   ...
 ]
 
@@ -830,7 +830,7 @@ JSON 배열만 출력:`;
    */
   private getBlacksmithDefaultPlan(): DailyPlanItem[] {
     return [
-      { time: '06:00', activity: '기상 및 아침 준비', location: '집', duration: 60, status: 'pending' },
+      { time: '06:15', activity: '기상 및 아침 준비', location: '집', duration: 45, status: 'pending' },
       { time: '07:00', activity: '아침 식사', location: '집', duration: 30, status: 'pending' },
       { time: '07:30', activity: '대장간으로 이동', location: '대장간', duration: 30, status: 'pending' },
       { time: '08:00', activity: '대장간 불 피우기', location: '모루', duration: 30, status: 'pending' },
@@ -849,7 +849,7 @@ JSON 배열만 출력:`;
    */
   private getInnkeeperDefaultPlan(): DailyPlanItem[] {
     return [
-      { time: '06:00', activity: '기상 및 아침 준비', location: '집', duration: 60, status: 'pending' },
+      { time: '06:15', activity: '기상 및 아침 준비', location: '집', duration: 45, status: 'pending' },
       { time: '07:00', activity: '여관 청소 및 준비', location: '여관', duration: 60, status: 'pending' },
       { time: '08:00', activity: '아침 요리 준비', location: '주방', duration: 60, status: 'pending' },
       { time: '09:00', activity: '카운터에서 손님 맞이', location: '카운터', duration: 180, status: 'pending' },

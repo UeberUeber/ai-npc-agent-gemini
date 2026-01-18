@@ -791,8 +791,8 @@ async function npcSleep() {
 function initGameTime() {
   gameTime = new GameTime({
     startDay: 1,
-    startHour: 6, // 새벽 6시 시작
-    startMinute: 0,
+    startHour: 6, // 새벽 6시 15분 시작
+    startMinute: 15,
     timeScale: 1, // 실시간 1초 = 게임 1분
     onTimeChange: (state) => {
       updateGameTimeUI(state);
@@ -973,7 +973,7 @@ async function initChat() {
   addLog('NPC Agent 초기화 완료', 'success');
   addLog(`${NPC_DEFINITIONS.length}명의 NPC 로드됨`, 'info');
 
-  // 모든 NPC 기상 및 하루 계획 생성 (게임 시작 = 06:00)
+  // 모든 NPC 기상 및 하루 계획 생성 (게임 시작 = 06:15)
   await npcWakeUp(gameTime.getState().day);
 
   // 안내 메시지

@@ -367,17 +367,31 @@ export class NpcController {
       // 현재 NPC 위치 확인
       const npc = this.world.getNpcs().find(n => n.id === this.definition.id);
       if (npc) {
-        // 영역 기반 판단: 현재 위치가 목표 건물의 영역 내부인지 확인
-        const isInsideTargetArea = this.isPositionInTargetArea(npc.position, locationName);
+        // 1. 목표 건물 안에 있는지 확인 (entrance 기반)
+        const isInsideTargetBuilding = this.isPositionInBuildingWithEntrance(npc.position, location.entrance);
 
-        if (isInsideTargetArea) {
+        if (isInsideTargetBuilding) {
           // 이미 목표 건물 안에 있음 → 직접 이동
           this.log(`📍 이미 ${locationName} 내부에 있음 - 직접 이동`, 'info');
           return this.world.moveNpcTo(this.definition.id, location.position, arrived);
         }
+
+        // 2. 현재 위치가 다른 건물 안인지 확인
+        const currentEntrance = this.findCurrentBuildingEntrance(npc.position);
+        if (currentEntrance) {
+          // 다른 건물 안에 있음 → 현재 건물 나가기 → 목적지 입구 → 목적지
+          this.log(`🚪 현재 건물 나가기: (${currentEntrance.x}, ${currentEntrance.y})`, 'info');
+          return this.world.moveNpcTo(this.definition.id, currentEntrance, () => {
+            this.log(`🚪 건물 밖으로 나옴, ${locationName} 입구로 이동`, 'info');
+            this.world.moveNpcTo(this.definition.id, location.entrance!, () => {
+              this.log(`🚪 입구 도착, 내부로 진입`, 'info');
+              this.world.moveNpcTo(this.definition.id, location.position, arrived);
+            });
+          });
+        }
       }
 
-      // 다른 곳에서 오는 경우: 입구로 먼저 이동, 도착하면 최종 목적지로 이동
+      // 야외에서 오는 경우: 입구로 먼저 이동, 도착하면 최종 목적지로 이동
       this.log(`🚪 ${locationName} 입구로 이동`, 'info');
       return this.world.moveNpcTo(this.definition.id, location.entrance, () => {
         this.log(`🚪 입구 도착, 내부로 진입`, 'info');
@@ -390,7 +404,71 @@ export class NpcController {
   }
 
   /**
-   * 현재 위치가 목표 장소의 영역 내부인지 확인
+   * 현재 위치가 특정 entrance를 가진 건물 안에 있는지 확인
+   * - areas를 순회하며 해당 entrance를 가진 영역 찾기
+   */
+  private isPositionInBuildingWithEntrance(pos: Position, targetEntrance: Position): boolean {
+    if (!this.definition.areas || this.definition.areas.length === 0) {
+      return false;
+    }
+
+    // locations에서 같은 entrance를 가진 장소들의 영역 찾기
+    for (const [, loc] of Object.entries(this.definition.locations)) {
+      if (loc.entrance &&
+          loc.entrance.x === targetEntrance.x &&
+          loc.entrance.y === targetEntrance.y) {
+        // 이 entrance를 가진 건물의 영역 찾기
+        for (const area of this.definition.areas) {
+          if (pos.x >= area.minX && pos.x <= area.maxX &&
+              pos.y >= area.minY && pos.y <= area.maxY) {
+            // 이 영역이 해당 entrance를 사용하는 건물인지 확인
+            // (영역 내 어떤 location이든 같은 entrance를 가지면 같은 건물)
+            for (const [, checkLoc] of Object.entries(this.definition.locations)) {
+              if (checkLoc.entrance &&
+                  checkLoc.entrance.x === targetEntrance.x &&
+                  checkLoc.entrance.y === targetEntrance.y &&
+                  checkLoc.position.x >= area.minX && checkLoc.position.x <= area.maxX &&
+                  checkLoc.position.y >= area.minY && checkLoc.position.y <= area.maxY) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 현재 위치가 속한 건물의 entrance 찾기
+   * - areas를 순회하며 현재 위치가 속한 영역의 entrance 반환
+   */
+  private findCurrentBuildingEntrance(pos: Position): Position | null {
+    if (!this.definition.areas || this.definition.areas.length === 0) {
+      return null;
+    }
+
+    // 현재 위치가 속한 영역 찾기 (priority 높은 순)
+    const sortedAreas = [...this.definition.areas].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+    for (const area of sortedAreas) {
+      if (pos.x >= area.minX && pos.x <= area.maxX &&
+          pos.y >= area.minY && pos.y <= area.maxY) {
+        // 이 영역 내 어떤 location의 entrance 찾기
+        for (const [, loc] of Object.entries(this.definition.locations)) {
+          if (loc.entrance &&
+              loc.position.x >= area.minX && loc.position.x <= area.maxX &&
+              loc.position.y >= area.minY && loc.position.y <= area.maxY) {
+            return loc.entrance;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 현재 위치가 목표 장소의 영역 내부인지 확인 (레거시 - 장소명 기반)
    * - areas 정의가 있으면 영역 매칭
    * - 없으면 목적지 좌표 ±1 범위로 판단
    */
@@ -446,7 +524,7 @@ export class NpcController {
 
     try {
       // 하루 계획 생성
-      const plan = await this.agent.wakeUp('06:00');
+      const plan = await this.agent.wakeUp('06:15');
 
       // 첫 번째 계획 장소로 이동
       if (plan.length > 0 && plan[0].location) {
