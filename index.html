@@ -121,6 +121,25 @@
       color: #f59e0b;
     }
 
+    .time-toggle-btn {
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .time-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .time-toggle-btn.paused {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
     /* ===== 타일 시스템 ===== */
     .game-grid {
       display: grid;
@@ -701,6 +720,17 @@
       color: #a78bfa;
     }
 
+    /* Thought 타입 메모리 (내적 판단/혼잣말) */
+    .memory-item.thought {
+      background: rgba(59, 130, 246, 0.15);
+      border-left: 3px solid #3b82f6;
+      font-style: italic;
+    }
+
+    .memory-item.thought .type {
+      color: #60a5fa;
+    }
+
     /* 중요도 툴팁 */
     .importance {
       position: relative;
@@ -1257,6 +1287,7 @@
             <span class="day" id="gameDay">1일차</span>
             <span class="time" id="gameTimeDisplay">6:00 AM</span>
             <span class="period" id="gamePeriod">새벽</span>
+            <button class="time-toggle-btn" id="timeToggleBtn" title="시간 일시정지/재개">⏸️</button>
           </div>
           <div class="game-grid" id="gameGrid">
             <!-- 10x10 그리드가 JS로 생성됨 -->
@@ -1327,6 +1358,9 @@
         </button>
         <button class="character-tab player-tab" id="tabPlayer" data-tab="player">
           <span class="tab-icon">🦸</span>플레이어
+        </button>
+        <button class="character-tab system-tab" id="tabSystem" data-tab="system">
+          <span class="tab-icon">⚙️</span>시스템
         </button>
       </div>
       <div class="panel-content">
@@ -1465,13 +1499,6 @@
             </div>
           </div>
 
-          <!-- 시스템 로그 -->
-          <div class="memory-section">
-            <h3>시스템 로그 <span id="chatCounter" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">대화: 0/10</span></h3>
-            <div class="log-list" id="systemLog">
-              <div class="log-item info">시스템 초기화 대기중...</div>
-            </div>
-          </div>
         </div>
 
         <!-- === 여관주인 로사 탭 === -->

@@ -358,7 +358,7 @@ function updateMemoryUI() {
   memoryList.innerHTML = memories
     .map(
       (m) => `
-      <div class="memory-item ${m.type === 'reflection' ? 'reflection' : ''}">
+      <div class="memory-item ${m.type === 'reflection' ? 'reflection' : m.type === 'thought' ? 'thought' : ''}">
         <div class="type">${m.type}</div>
         <div>${m.content}</div>
         ${renderImportance(m)}
@@ -386,7 +386,7 @@ function updateRosaMemoryUI() {
   rosaMemoryList.innerHTML = memories
     .map(
       (m) => `
-      <div class="memory-item ${m.type === 'reflection' ? 'reflection' : ''}">
+      <div class="memory-item ${m.type === 'reflection' ? 'reflection' : m.type === 'thought' ? 'thought' : ''}">
         <div class="type">${m.type}</div>
         <div>${m.content}</div>
         ${renderImportance(m)}
@@ -777,6 +777,22 @@ function initGameTime() {
   // 시간 흐름 시작
   gameTime.start();
   addLog('게임 시간 시작 (1초 = 1분)', 'info');
+
+  // 시간 일시정지 버튼
+  const timeToggleBtn = document.getElementById('timeToggleBtn') as HTMLButtonElement;
+  timeToggleBtn.addEventListener('click', () => {
+    if (gameTime.isRunning()) {
+      gameTime.pause();
+      timeToggleBtn.textContent = '▶️';
+      timeToggleBtn.classList.add('paused');
+      addLog('시간 일시정지', 'warning');
+    } else {
+      gameTime.start();
+      timeToggleBtn.textContent = '⏸️';
+      timeToggleBtn.classList.remove('paused');
+      addLog('시간 재개', 'info');
+    }
+  });
 }
 
 // 채팅 초기화

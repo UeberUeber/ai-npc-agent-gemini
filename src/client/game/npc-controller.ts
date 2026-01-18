@@ -57,6 +57,10 @@ export class NpcController {
   private lastPlayerUtteranceTime: number = 0;
   private static PLAYER_UTTERANCE_COOLDOWN = 30000;  // 30초 쿨다운
 
+  // 대화 상태 관리
+  private stateBeforeConversing: NpcState | null = null;
+  private conversationTurns: number = 0;
+
   /**
    * 두 NPC간 대화 키 생성 (정렬하여 양방향 동일 키)
    */
@@ -179,6 +183,64 @@ export class NpcController {
     return this.state;
   }
 
+  /**
+   * 대화 시작 - 이동 정지, 상태 저장
+   */
+  startConversation(): void {
+    if (this.state === 'conversing') return;
+
+    // 현재 상태 저장 (대화 종료 후 복원용)
+    this.stateBeforeConversing = this.state;
+    this.conversationTurns = 0;
+
+    // 이동 중이면 정지
+    if (this.state === 'moving') {
+      this.world.stopNpcMovement(this.definition.id);
+    }
+
+    this.setState('conversing');
+    this.log('💬 대화 시작 - 이동 정지', 'info');
+  }
+
+  /**
+   * 대화 턴 증가
+   */
+  incrementConversationTurn(): void {
+    this.conversationTurns++;
+  }
+
+  /**
+   * 대화 종료 - 이전 상태로 복원
+   */
+  async endConversation(): Promise<void> {
+    if (this.state !== 'conversing') return;
+
+    this.log(`💬 대화 종료 (${this.conversationTurns}턴)`, 'info');
+
+    // 대화 중 시간이 많이 흘렀으면 재플래닝 필요
+    // TODO: 대화 종료 후 재플래닝 로직
+
+    // 이전 상태로 복원
+    const previousState = this.stateBeforeConversing || 'idle';
+    this.stateBeforeConversing = null;
+    this.conversationTurns = 0;
+
+    this.setState(previousState);
+
+    // 이동 중이었다면 다시 이동 시작
+    if (previousState === 'moving' && this.currentTargetLocation) {
+      this.log(`🚶 이동 재개: ${this.currentTargetLocation}`, 'info');
+      this.moveTo(this.currentTargetLocation);
+    }
+  }
+
+  /**
+   * 대화 중인지 확인
+   */
+  isConversing(): boolean {
+    return this.state === 'conversing';
+  }
+
   // ============================================================
   // 이동
   // ============================================================
@@ -188,6 +250,14 @@ export class NpcController {
    * 건물 내부 장소의 경우 입구를 먼저 경유
    */
   moveTo(locationName: string, onArrival?: () => void): boolean {
+    // 대화 중이면 이동 불가
+    if (this.state === 'conversing') {
+      this.log(`⚠️ 대화 중 - 이동 보류: ${locationName}`, 'warning');
+      // 목적지만 저장 (대화 종료 후 이동 재개용)
+      this.currentTargetLocation = locationName;
+      return false;
+    }
+
     const location = this.resolveLocation(locationName);
 
     if (!location) {
@@ -490,6 +560,10 @@ export class NpcController {
     }
 
     this.log('💬 자발적 발화 생성 중...', 'info');
+
+    // 대화 시작 - 이동 정지
+    this.startConversation();
+
     const utterance = await this.agent.generateSpontaneousUtterance(observation);
 
     // UI에 전달

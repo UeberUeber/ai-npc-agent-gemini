@@ -5,7 +5,7 @@
  * 나중에 Firestore로 쉽게 교체할 수 있도록 인터페이스를 동일하게 유지합니다.
  */
 
-export type MemoryType = 'observation' | 'reflection' | 'plan' | 'knowledge';
+export type MemoryType = 'observation' | 'reflection' | 'plan' | 'knowledge' | 'thought';
 
 export interface Memory {
   id: string;

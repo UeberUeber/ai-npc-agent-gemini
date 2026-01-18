@@ -1064,4 +1064,138 @@ ${speakerName}의 말에 응답하세요.
       return '...그래.';
     }
   }
+
+  // ========================================
+  // 내적 판단 시스템 (Thought/Inner Monologue)
+  // ========================================
+
+  /**
+   * 내적 판단/혼잣말 저장
+   */
+  addThought(content: string, importance: number = 4): void {
+    this.memoryStore.add({
+      type: 'thought',
+      content: content,
+      importance: importance,
+    });
+  }
+
+  /**
+   * 대화 계속 여부 판단 (논문: Reaction System)
+   * - NPC 성격, 다음 일정 중요도, 대화 내용을 고려
+   * - 내적 판단을 thought로 저장
+   */
+  async shouldContinueConversation(
+    nextPlan: DailyPlanItem | null,
+    minutesUntilNext: number,
+    conversationTurns: number
+  ): Promise<{ continue: boolean; utterance?: string }> {
+    // 다음 일정이 없거나 30분 이상 남았으면 계속
+    if (!nextPlan || minutesUntilNext > 30) {
+      return { continue: true };
+    }
+
+    // 대화가 짧으면 (3턴 미만) 계속
+    if (conversationTurns < 3) {
+      return { continue: true };
+    }
+
+    const recentHistory = this.conversationHistory.slice(-4)
+      .map(m => `${m.speaker === 'user' ? '상대방' : '나'}: ${m.content}`)
+      .join('\n');
+
+    const prompt = `## 당신의 정체
+이름: ${this.persona.name}
+성격: ${this.persona.traits.join(', ')}
+말투: ${this.persona.speechStyle}
+
+## 다음 일정
+시간: ${nextPlan.time}
+활동: ${nextPlan.activity}
+장소: ${nextPlan.location}
+
+## 현재 상황
+- 다음 일정까지 약 ${minutesUntilNext}분 남음
+- 현재 대화 ${conversationTurns}턴 진행 중
+
+## 최근 대화
+${recentHistory}
+
+## 판단 기준
+- 당신의 성격(${this.persona.traits.join(', ')})을 고려하세요
+- 다음 일정이 중요하면 가야 합니다
+- 대화 내용이 급하거나 중요하면 일정을 미룰 수 있습니다
+- 성격이 성실하면 일정을 중시, 사교적이면 대화를 중시
+
+## 응답 형식 (JSON)
+{
+  "thought": "내적 판단 (예: '슬슬 가야하는데... 근데 이 사람 할 말이 더 있는 것 같아')",
+  "continue": true/false,
+  "utterance": "대화를 끊을 경우 할 말 (continue가 false일 때만)"
+}`;
+
+    try {
+      const response = await gemini.generate(prompt);
+      const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+      const result = JSON.parse(cleaned);
+
+      // 내적 판단을 thought로 저장
+      if (result.thought) {
+        this.addThought(result.thought, 5);
+      }
+
+      return {
+        continue: result.continue,
+        utterance: result.utterance,
+      };
+    } catch (error) {
+      console.error('대화 계속 판단 실패:', error);
+      return { continue: true };
+    }
+  }
+
+  /**
+   * 혼잣말 생성 (혼자 있을 때)
+   */
+  async generateSelfTalk(): Promise<string | null> {
+    // 20% 확률로만 혼잣말
+    if (Math.random() > 0.2) {
+      return null;
+    }
+
+    const recentMemories = this.memoryStore.retrieve(this.scratch.currentActivity, 3);
+
+    const prompt = `## 당신의 정체
+이름: ${this.persona.name}
+성격: ${this.persona.traits.join(', ')}
+
+## 현재 상태
+활동: ${this.scratch.currentActivity}
+위치: ${this.scratch.currentLocation}
+기분: ${this.scratch.currentMood}
+
+## 최근 기억
+${recentMemories.map(m => `- ${m.content}`).join('\n') || '(없음)'}
+
+## 지시
+혼자 일하면서 할 수 있는 짧은 혼잣말을 생성하세요.
+- 현재 하는 일에 대한 생각
+- 최근 있었던 일에 대한 회상
+- 오늘 계획에 대한 생각
+- 1문장으로 짧게
+- 혼잣말이므로 "..." 이나 "음..." 같은 표현 가능
+- 대화체가 아닌 독백체로`;
+
+    try {
+      const selfTalk = await gemini.generate(prompt);
+
+      // thought로 저장
+      this.addThought(`(혼잣말) ${selfTalk}`, 3);
+
+      return selfTalk;
+    } catch (error) {
+      console.error('혼잣말 생성 실패:', error);
+      return null;
+    }
+  }
 }

@@ -84,6 +84,7 @@ export type NpcState =
   | 'waking_up'     // 기상 중
   | 'moving'        // 이동 중
   | 'working'       // 활동 중
+  | 'conversing'    // 대화 중 (이동 정지)
   | 'idle';         // 대기
 
 // NPC 이벤트
