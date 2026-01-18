@@ -31,7 +31,7 @@ npm run dev
 | **Conversation State** | 대화 시작 시 이동 정지 → 대화 종료 후 이동 재개 |
 | **Thought Memory** | 내적 판단/혼잣말을 thought 타입으로 메모리에 저장 |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
-| **Perception** | 시야 내 엔티티/오브젝트 감지 → 변화만 자연어로 메모리 저장 (델타 기반) |
+| **Perception** | 시야 내 엔티티/오브젝트 감지 → 트리거 역할만 (메모리 저장 없음, 노이즈 방지) |
 | **Plan-Aware Response** | 대화 응답 시 현재 계획 컨텍스트 반영 (하는 일, 시간, 다음 일정) |
 
 ## Architecture
@@ -784,6 +784,13 @@ clear(): void
 ```
 
 ## Changelog
+
+### 2025-01-19 (인식 기록 저장 제거)
+- **Perception 메모리 저장 제거**: 인식 기록("시야에 나타났다/사라졌다")을 메모리에 저장하지 않음
+  - Before: `perceiveAndRemember()` → `savePerceptions()` → `addObservation()` 호출
+  - After: 트리거 역할만 유지 (자율 발화, NPC간 대화), 메모리 저장 없음
+  - 이유: 인식 기록이 `retrieve()` 시 노이즈로 작용하여 의미있는 기억 검색 방해
+  - 논문과의 차이: 논문은 "Klaus가 Maria와 대화했다" 같은 의미있는 관찰 저장, 현재는 "시야에 나타났다" 수준으로 활용도 낮음
 
 ### 2025-01-19 (대화 지속 판단 & 재플래닝)
 - **Conversation Continuation Decision**: NPC가 대화 매 턴마다 계속할지 판단

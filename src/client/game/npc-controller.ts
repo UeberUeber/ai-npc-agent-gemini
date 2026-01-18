@@ -571,17 +571,11 @@ export class NpcController {
   }
 
   /**
-   * 인식 실행 + 메모리 저장 (한 번에)
+   * 인식 실행 + 트리거 (메모리 저장 제거됨)
+   * - 인식 기록은 트리거 역할만 하고 저장하지 않음 (노이즈 방지)
    */
   async perceiveAndRemember(): Promise<PerceptionResult> {
     const result = this.perceive();
-
-    // 기존: 관찰 저장
-    if (result.newEntities.length > 0 ||
-        result.changedObjects.length > 0 ||
-        result.exitedEntities.length > 0) {
-      await this.savePerceptions(result);
-    }
 
     // 플레이어 감지 시 자율 발화 트리거
     const playerDetected = result.newEntities.find(e => e.entity.id === 'player');
