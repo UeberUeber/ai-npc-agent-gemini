@@ -863,7 +863,134 @@ JSON 배열만 출력:`;
   }
 
   /**
-   * 시간에 따라 현재 계획 업데이트
+   * 재플래닝: 대화 후 남은 시간대에 대해 새 계획 생성
+   * - 최근 대화에서 얻은 정보를 반영하여 LLM으로 새 계획 생성
+   */
+  async replan(currentTime: string): Promise<DailyPlanItem[]> {
+    this.log('🔄 재플래닝 시작...', 'info');
+
+    const p = this.persona;
+
+    // 1. 기존 계획에서 완료된 것들 추출
+    const completedActivities = this.scratch.dailyPlan
+      ?.filter(item => item.status === 'completed' || item.status === 'in_progress')
+      .map(item => `${item.time} ${item.activity}`)
+      .join(', ') || '(없음)';
+
+    // 2. 최근 대화/관찰에서 중요한 정보 추출 (importance >= 6)
+    const recentImportant = this.memoryStore.getAll()
+      .filter(m => (m.type === 'observation' || m.type === 'thought') && (m.importance ?? 5) >= 6)
+      .slice(-5)
+      .map(m => m.content);
+
+    // 3. Knowledge 검색
+    const knowledge = this.memoryStore.getAll()
+      .filter(m => m.type === 'knowledge')
+      .slice(0, 10);
+    const knowledgeContext = knowledge.length > 0
+      ? knowledge.map(k => `- ${k.content}`).join('\n')
+      : '(세계 지식 없음)';
+
+    const prompt = `## 당신의 정체
+이름: ${p.name}
+직업: ${p.occupation}
+성격: ${p.traits.join(', ')}
+목표: ${p.currentGoals.join(', ')}
+
+## 내가 아는 세계
+${knowledgeContext}
+
+## 오늘 지금까지 한 일
+${completedActivities}
+
+## 최근 중요한 일 (방금 대화에서 알게 된 것 포함)
+${recentImportant.length > 0 ? recentImportant.map(r => `- ${r}`).join('\n') : '(특별한 일 없음)'}
+
+## 요청
+현재 시간은 **${currentTime}**입니다.
+지금부터 22:00 취침까지 남은 시간에 대한 계획을 다시 세워주세요.
+
+### 핵심 제약
+1. **"내가 아는 세계"에 있는 장소만 사용**
+2. **"최근 중요한 일"을 반영** - 새로 알게 된 정보가 있으면 계획에 포함
+3. 시작 시간은 **${currentTime}** 이후부터
+4. 마지막은 취침 준비 (21:00~22:00 사이)
+
+## 출력 형식
+JSON 배열만 출력:
+[
+  {"time": "${currentTime}", "activity": "활동", "location": "장소", "duration": 60, "goalRelated": false},
+  ...
+]`;
+
+    try {
+      const response = await gemini.generate(prompt);
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+
+      if (!jsonMatch) {
+        throw new Error('JSON 배열을 찾을 수 없음');
+      }
+
+      const rawPlan = JSON.parse(jsonMatch[0]) as Array<{
+        time: string;
+        activity: string;
+        location?: string;
+        duration: number;
+        goalRelated?: boolean;
+      }>;
+
+      // DailyPlanItem으로 변환
+      const newPlan: DailyPlanItem[] = rawPlan.map(item => ({
+        time: item.time,
+        activity: item.activity,
+        location: item.location,
+        duration: item.duration || 60,
+        status: 'pending' as const,
+        goalRelated: item.goalRelated,
+      }));
+
+      // 기존 완료된 계획 + 새 계획 합치기
+      const completedPlan = this.scratch.dailyPlan?.filter(
+        item => item.status === 'completed'
+      ) || [];
+
+      const mergedPlan = [...completedPlan, ...newPlan];
+
+      // 첫 번째 새 항목을 in_progress로
+      if (newPlan.length > 0) {
+        const firstNewIndex = completedPlan.length;
+        mergedPlan[firstNewIndex].status = 'in_progress';
+        this.scratch.currentPlanIndex = firstNewIndex;
+        this.scratch.currentActivity = mergedPlan[firstNewIndex].activity;
+        if (mergedPlan[firstNewIndex].location) {
+          this.scratch.currentLocation = mergedPlan[firstNewIndex].location!;
+        }
+      }
+
+      this.scratch.dailyPlan = mergedPlan;
+
+      // 재플래닝 기록
+      this.memoryStore.add({
+        type: 'plan',
+        content: `${currentTime}에 계획 재조정: ${newPlan.map(p => `${p.time} ${p.activity}`).join(' → ')}`,
+        importance: 6,
+      });
+
+      this.log(`✅ 재플래닝 완료: ${newPlan.length}개 활동`, 'success');
+
+      return mergedPlan;
+    } catch (error) {
+      console.error('재플래닝 실패:', error);
+      this.log('⚠️ 재플래닝 실패, 기존 계획 유지', 'warning');
+
+      // 실패 시 기존 updatePlanProgress 로직 사용
+      this.updatePlanProgress(currentTime);
+      return this.scratch.dailyPlan || [];
+    }
+  }
+
+  /**
+   * 시간에 따라 현재 계획 업데이트 (단순 진행 - 재플래닝 아님)
    */
   updatePlanProgress(currentTime: string): { changed: boolean; newActivity?: DailyPlanItem } {
     if (!this.scratch.dailyPlan || !this.scratch.isAwake) {

@@ -240,17 +240,23 @@ export class NpcController {
     this.conversationStartTime = null;
 
     if (needsReplanning && currentTime) {
-      this.log('🔄 대화로 시간이 흘러 계획 재조정 중...', 'info');
-      const result = this.agent.updatePlanProgress(currentTime);
-      if (result.changed && result.newActivity) {
-        this.log(`📋 새 활동: ${result.newActivity.activity} @ ${result.newActivity.location}`, 'success');
+      this.log('🔄 대화로 시간이 흘러 재플래닝 중...', 'info');
 
-        // 새 활동 위치로 이동
-        this.setState('idle');
-        if (result.newActivity.location) {
-          this.moveTo(result.newActivity.location);
+      // 진짜 재플래닝: LLM으로 남은 시간대 새 계획 생성
+      const newPlan = await this.agent.replan(currentTime);
+
+      if (newPlan.length > 0) {
+        const currentActivity = newPlan.find(p => p.status === 'in_progress');
+        if (currentActivity) {
+          this.log(`📋 새 활동: ${currentActivity.activity} @ ${currentActivity.location}`, 'success');
+
+          // 새 활동 위치로 이동
+          this.setState('idle');
+          if (currentActivity.location) {
+            this.moveTo(currentActivity.location);
+          }
+          return;
         }
-        return;
       }
     }
 
