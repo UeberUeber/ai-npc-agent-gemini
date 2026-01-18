@@ -94,7 +94,7 @@ export class GameWorld {
     // 플레이어 초기 위치
     this.player = {
       id: 'player',
-      emoji: '⚔️',
+      emoji: '🧑',
       position: { x: 5, y: 5 },
       name: '플레이어',
     };

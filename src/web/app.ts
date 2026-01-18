@@ -117,7 +117,7 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = type === 'user' ? '⚔️' : type === 'npc' ? '🔨' : '⚙️';
+  avatar.textContent = type === 'user' ? '🧑' : type === 'npc' ? '🔨' : '⚙️';
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
@@ -373,7 +373,7 @@ function updateTileInfoUI(tileInfo: TileInfo) {
   `;
 
   if (tileInfo.isPlayerHere) {
-    content += `<div class="tile-info-item player">⚔️ 용사 스마게</div>`;
+    content += `<div class="tile-info-item player">🧑 용사 스마게</div>`;
   }
 
   if (tileInfo.npc) {
