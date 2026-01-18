@@ -105,7 +105,7 @@ npm run dev
 │                                 # - DOM 이벤트 핸들링
 │                                 # - 시스템 로그 표시
 │                                 # - 실시간 상태 UI 업데이트
-├── .env                           # 환경변수 (VITE_GEMINI_MODEL)
+├── .env                           # (선택) 모델 설정 - 없어도 기본값 사용
 ├── vite.config.ts                 # Vite 설정
 └── package.json
 ```
