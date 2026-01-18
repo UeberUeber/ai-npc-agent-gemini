@@ -1462,6 +1462,16 @@ ${recentHistory}
       if (minutesUntilNext < 0) {
         minutesUntilNext += 24 * 60;
       }
+
+      // 일정 10분 전이면 → 무조건 떠남 (계획 지키기 위해)
+      // 예: 현재 10:50, 다음 일정 11:00 → 10분 남음 → 떠남
+      if (minutesUntilNext <= 10) {
+        this.addThought(`${nextPlan.time}에 ${nextPlan.activity} 해야 해서 슬슬 준비해야겠다.`, 5);
+        return {
+          continue: false,
+          utterance: `아, 슬슬 ${nextPlan.activity} 준비해야 해서 이만 가볼게!`,
+        };
+      }
     }
 
     return this.shouldContinueConversation(nextPlan, minutesUntilNext, conversationTurns);
