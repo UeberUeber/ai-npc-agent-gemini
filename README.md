@@ -413,6 +413,90 @@ npm run build    # 프로덕션 빌드
 
 ---
 
+## Implementation Details (논문 외 구현)
+
+논문에서 다루지 않는 **실제 구현 시 필요한 엣지 케이스 처리**입니다.
+
+### 1. 자는 NPC 자동 기상
+
+**상황**: 플레이어가 자는 NPC(`isAwake: false`)에게 말을 건다
+
+**문제**: 대화는 진행되지만 `dailyPlan`이 없어서 대화 종료 후 NPC가 멈춤
+
+**해결**:
+```
+startConversation() 호출 시:
+  if (!isAwake) → wakeUp() → 하루 계획 생성 → 대화 진행
+```
+
+**구현**: `npc-controller.ts:195-201`
+
+### 2. 대화 중 일정 시간 초과 감지
+
+**상황**: 대화하다가 다음 일정 시간을 넘겨버림 (현재 11:15, 다음 일정 11:00)
+
+**문제**: `minutesUntilNext = -15`인데 자정 넘김(23:00→01:00)과 구분 필요
+
+**해결**:
+```
+if (minutesUntilNext < 0 && minutesUntilNext > -12*60):
+  → 실제 일정 초과! 즉시 대화 종료
+  → thought: "이런, 11:00에 점심 준비해야 하는데 이미 지났다!"
+  → 발화: "앗, 이런! 벌써 이 시간이네. 점심 준비 해야 해서 먼저 가볼게!"
+
+if (minutesUntilNext < 0 && minutesUntilNext <= -12*60):
+  → 자정 넘김 (23:00 → 01:00)
+  → minutesUntilNext += 24*60
+```
+
+**구현**: `agent.ts:1312-1326`
+
+### 3. 대화 종료 후 재플래닝
+
+**상황**: 긴 대화로 여러 일정을 건너뜀 (10:00 대화 시작 → 12:00 대화 종료)
+
+**해결**:
+```
+endConversation() 시:
+  if (대화 시간 >= 30분):
+    → updatePlanProgress() 호출
+    → 건너뛴 계획은 'skipped' 처리
+    → 현재 시간에 맞는 새 활동으로 이동
+```
+
+**구현**: `npc-controller.ts:234-247`
+
+### 4. Thought 메모리 타입
+
+**목적**: NPC의 내면 판단/혼잣말을 기록 (플레이어에게 보이지 않음)
+
+**논문과 차이**: 논문에는 observation/reflection/plan만 있음
+
+**사용 시점**:
+- 대화 지속 판단 시: "바빠서 대화를 그만해야겠다"
+- 자율 발화 판단 시: "저 손님에게 말을 걸어볼까?"
+- 일정 초과 감지 시: "이런, 시간이 지났다!"
+
+**구현**: `agent.ts:addThought()`
+
+### 5. 플레이어 발화 쿨다운
+
+**목적**: 자율 발화 스팸 방지 (같은 플레이어에게 반복 말 걸기 방지)
+
+**설정**: 3초 쿨다운
+
+**구현**: `npc-controller.ts:605-610`
+
+### 6. NPC-NPC 대화 쿨다운
+
+**목적**: 같은 NPC끼리 반복 대화 방지
+
+**설정**: 5분 쿨다운 (양방향 공유 키: "john↔rosa")
+
+**구현**: `npc-controller.ts:641-645`
+
+---
+
 ## Known Limitations
 
 | 영역 | 현재 구현 | 논문/권장 |
@@ -428,7 +512,7 @@ npm run build    # 프로덕션 빌드
 
 - **Language**: TypeScript
 - **Build**: Vite
-- **AI**: Google Gemini API (`gemini-2.0-flash`)
+- **AI**: Google Gemini API (`gemini-3-flash-preview`)
 - **Storage**: localStorage (브라우저)
 
 ---
