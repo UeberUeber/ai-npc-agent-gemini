@@ -78,6 +78,7 @@ export class NPCAgent {
   private chatCount: number = 0;
   private isReflecting: boolean = false;
   private onLog?: LogCallback;
+  private npcInitiatedConversation: boolean = false; // NPC가 먼저 말 건 대화인지
 
   constructor(persona: Persona, scratch: Scratch) {
     this.persona = persona;
@@ -446,9 +447,15 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
     const current = `## 용사 스마게의 말\n"${userMessage}"`;
 
     // 6. 응답 지침 (JSON 형식 요청)
-    const activityHint = currentPlan
-      ? `현재 "${actualActivity}" 중이므로, 이 상황에 맞게 대화하세요. (예: 바쁘다고 하거나, 하던 일을 언급하거나, 잠깐 멈추고 대화하거나)`
-      : `현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.`;
+    // NPC가 먼저 말 건 경우 "바쁘다"고 거부하면 안 됨
+    let activityHint: string;
+    if (this.npcInitiatedConversation) {
+      activityHint = `당신이 먼저 말을 걸었으므로, 대화에 응해야 합니다. 현재 "${actualActivity}" 중이지만, 손님과 대화할 의향이 있습니다.`;
+    } else if (currentPlan) {
+      activityHint = `현재 "${actualActivity}" 중이므로, 이 상황에 맞게 대화하세요. (예: 바쁘다고 하거나, 하던 일을 언급하거나, 잠깐 멈추고 대화하거나)`;
+    } else {
+      activityHint = `현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.`;
+    }
 
     const instruction = `## 응답 지침
 - 당신은 ${p.name}입니다. 위 정체성과 상태에 맞게 대답하세요.
@@ -508,12 +515,14 @@ JSON만 출력:`;
 
   clearConversationHistory(): void {
     this.conversationHistory = [];
+    this.npcInitiatedConversation = false;
   }
 
   clearAllMemories(): void {
     this.memoryStore.clear();
     this.conversationHistory = [];
     this.chatCount = 0;
+    this.npcInitiatedConversation = false;
   }
 
   // ========================================
@@ -1091,6 +1100,9 @@ ${previousUtterances.map(m => `- ${m.content}`).join('\n') || '(없음)'}
         importance: 5,
       });
 
+      // NPC가 먼저 대화를 시작했음을 표시
+      this.npcInitiatedConversation = true;
+
       return response;
     } catch (error) {
       console.error('자발적 발화 생성 실패:', error);
@@ -1307,7 +1319,22 @@ ${recentHistory}
       nextPlan = this.scratch.dailyPlan[currentIndex + 1];
       const nextMinutes = this.timeToMinutes(nextPlan.time);
       minutesUntilNext = nextMinutes - currentMinutes;
-      if (minutesUntilNext < 0) minutesUntilNext += 24 * 60;
+
+      // 일정 시간이 이미 지났으면 (자정 넘김이 아닌 경우) → 즉시 대화 종료
+      // 예: 현재 11:15, 다음 일정 11:00 → -15분 (자정 넘김 아님)
+      if (minutesUntilNext < 0 && minutesUntilNext > -12 * 60) {
+        // 12시간 이내의 음수면 → 일정 지남 (자정 넘김 아님)
+        this.addThought(`이런, ${nextPlan.time}에 ${nextPlan.activity} 해야 하는데 이미 시간이 지났다!`, 6);
+        return {
+          continue: false,
+          utterance: `앗, 이런! 벌써 이 시간이네. ${nextPlan.activity} 해야 해서 먼저 가볼게!`,
+        };
+      }
+
+      // 자정 넘어가는 경우 (예: 23:00 → 01:00)
+      if (minutesUntilNext < 0) {
+        minutesUntilNext += 24 * 60;
+      }
     }
 
     return this.shouldContinueConversation(nextPlan, minutesUntilNext, conversationTurns);

@@ -43,8 +43,8 @@ export const innkeeperKnowledge: string[] = [
   // 여관 좌표 지식
   '나의 여관 "붉은 달 여관"은 마을 남쪽에 있다. 입구는 (4,11)이고, 내부 영역은 x:2-7, y:8-10이다.',
   '여관 안에 주방이 (2,9)에 있다. 주방에서 요리를 한다.',
-  '여관 안에 카운터가 (7,8)에 있다. 카운터에서 손님을 맞이한다.',
-  '여관에 식탁이 여러 개 있다. (3,9), (5,9), (4,10), (6,10)에 있다.',
+  '여관 안에 카운터가 (4,10)에 있다. 카운터에서 손님을 맞이한다.',
+  '여관에 식탁이 여러 개 있다. (3,9), (5,9), (6,10)에 있다.',
   '여관에서 여행자에게 숙박을 제공한다. 2층에 객실이 있다.',
   '식사와 술을 판매한다. 보리 스튜가 가장 인기 있다.',
   '여행자들에게서 바깥 세상 소식을 들을 수 있다. 여관은 마을의 정보 중심지다.',
@@ -54,9 +54,9 @@ export const innkeeperKnowledge: string[] = [
   '여관 동쪽에 나의 집이 있다. 입구는 (12,11)이고, 내부 영역은 x:11-12, y:8-10이다.',
   '집 안에 침대가 (11,8)에 있다. 침대에서 잠을 잔다.',
 
-  // 대장간 좌표 지식
-  '대장간은 마을 북쪽에 있다. 입구는 (3,4)이고, 내부 영역은 x:2-4, y:2-3이다.',
-  '대장장이 존이 운영한다. 존은 오랜 단골이라 점심때 여관에 자주 온다.',
+  // 대장간 관련 (방문 불가 - 여관 운영 때문)
+  '대장장이 존이 마을 북쪽에서 대장간을 운영한다. 존은 오랜 단골이라 점심때 여관에 자주 온다.',
+  '나는 여관을 비울 수 없어서 대장간에 직접 갈 일은 없다. 존이 여관으로 와야 한다.',
 
   // 가능한 활동 지식 (시간대별 위치 명시)
   '나는 여관주인이다. 손님에게 음식과 숙박을 제공한다.',
@@ -79,15 +79,13 @@ export const innkeeperLocations: Record<string, LocationDef> = {
   // 여관 관련 (입구: x:4-5, y:11)
   '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
   '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
-  '카운터': { position: { x: 7, y: 8 }, facing: 'left', description: '접수 카운터', entrance: { x: 4, y: 11 } },
+  '카운터': { position: { x: 4, y: 10 }, facing: 'up', description: '접수 카운터', entrance: { x: 4, y: 11 } },
   '주방': { position: { x: 2, y: 8 }, facing: 'right', description: '주방 조리대 앞', entrance: { x: 4, y: 11 } },
   '식탁': { position: { x: 4, y: 9 }, facing: 'down', description: '손님 식탁 앞', entrance: { x: 4, y: 11 } },
 
   // 기타 (야외 장소는 entrance 없음)
   '마을 거리': { position: { x: 7, y: 5 }, facing: 'down', description: '마을 중앙' },
-
-  // 다른 NPC 장소 (대장간 입구: x:3, y:4)
-  '대장간': { position: { x: 3, y: 3 }, facing: 'right', description: '존의 대장간', entrance: { x: 3, y: 4 } },
+  // 대장간은 제거 - 로사는 여관을 운영해야 해서 대장간에 갈 일이 없음 (존이 점심에 여관으로 옴)
 };
 
 // ============================================================
@@ -182,12 +180,12 @@ const objects: ObjectDef[] = [
     blocksVision: false,
   },
   {
-    id: 'table_3',
-    name: '식탁',
-    emoji: '🍽️',
+    id: 'counter_rosa',
+    name: '카운터',
+    emoji: '🧾',
     position: { x: 4, y: 10 },
-    description: '손님이 식사할 수 있는 테이블',
-    initialState: '비어 있음',
+    description: '손님을 맞이하고 주문을 받는 카운터',
+    initialState: '영업 중',
     blocksMovement: true,
     blocksVision: false,
   },

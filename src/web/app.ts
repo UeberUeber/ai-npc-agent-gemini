@@ -650,7 +650,7 @@ async function sendMessage() {
       controller.incrementConversationTurn();
 
       // NPC가 대화를 계속할지 판단 (성격, 다음 일정에 따라)
-      const currentTime = gameTime.getTimeString();
+      const currentTime = gameTime.formatTime24h();
       const turns = controller.getConversationTurns();
       const shouldContinue = await agent.checkShouldContinue(currentTime, turns);
 
@@ -683,7 +683,23 @@ async function sendMessage() {
   } catch (error) {
     hideTypingIndicator();
     console.error('대화 오류:', error);
-    addMessage('system', '오류가 발생했습니다. API 키를 확인해주세요.', '시스템');
+
+    // 에러 유형에 따른 구체적인 메시지
+    let errorMsg = '알 수 없는 오류가 발생했습니다.';
+    if (error instanceof Error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('api key') || msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('401')) {
+        errorMsg = 'API 키가 유효하지 않습니다. 설정에서 API 키를 확인해주세요.';
+      } else if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
+        errorMsg = 'API 할당량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+      } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
+        errorMsg = '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.';
+      } else {
+        errorMsg = `오류: ${error.message}`;
+      }
+    }
+    addMessage('system', errorMsg, '시스템');
+    addLog(`⚠️ 대화 오류: ${error instanceof Error ? error.message : String(error)}`, 'warning');
   }
 
   userInput.disabled = false;
@@ -928,7 +944,7 @@ async function initChat() {
       },
       // 현재 게임 시간 (재플래닝용)
       getCurrentTime: () => {
-        return gameTime.getTimeString();
+        return gameTime.formatTime24h();
       },
     });
     controller.setupWorld();
