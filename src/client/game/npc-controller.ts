@@ -475,6 +475,11 @@ export class NpcController {
    * 자율 발화 시도 (논문: Reaction & Dialogue System)
    */
   private async tryInitiateConversation(observation: string): Promise<void> {
+    // 쿨다운 체크 (최근에 플레이어에게 말했으면 스킵)
+    if (Date.now() - this.lastPlayerUtteranceTime < NpcController.PLAYER_UTTERANCE_COOLDOWN) {
+      return;
+    }
+
     this.log('🎯 플레이어 감지! 반응 판단 중...', 'info');
 
     const shouldReact = await this.agent.shouldInitiateConversation(observation);
@@ -490,6 +495,9 @@ export class NpcController {
     // UI에 전달
     this.options.onSpontaneousUtterance?.(utterance, this.definition.id);
     this.log(`🗣️ "${utterance.slice(0, 30)}..."`, 'success');
+
+    // 쿨다운 기록
+    this.lastPlayerUtteranceTime = Date.now();
   }
 
   /**

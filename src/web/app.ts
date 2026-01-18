@@ -137,7 +137,20 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = type === 'user' ? '🦸' : type === 'npc' ? '🔨' : '⚙️';
+  // NPC별 아이콘 분기
+  let avatarIcon = '⚙️';
+  if (type === 'user') {
+    avatarIcon = '🦸';
+  } else if (type === 'npc') {
+    if (sender.includes('존') || sender.toLowerCase().includes('john')) {
+      avatarIcon = '👨‍🔧';
+    } else if (sender.includes('로사') || sender.toLowerCase().includes('rosa')) {
+      avatarIcon = '👩‍🍳';
+    } else {
+      avatarIcon = '🧑';  // 기타 NPC
+    }
+  }
+  avatar.textContent = avatarIcon;
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
@@ -159,14 +172,21 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 }
 
 // 타이핑 인디케이터
-function showTypingIndicator() {
+function showTypingIndicator(npcId?: string) {
   const indicator = document.createElement('div');
   indicator.className = 'message npc';
   indicator.id = 'typingIndicator';
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = '🔨';
+  // NPC별 아이콘 분기
+  let avatarIcon = '🧑';
+  if (npcId === 'blacksmith_john') {
+    avatarIcon = '👨‍🔧';
+  } else if (npcId === 'innkeeper_rosa') {
+    avatarIcon = '👩‍🍳';
+  }
+  avatar.textContent = avatarIcon;
 
   const typing = document.createElement('div');
   typing.className = 'typing-indicator';
@@ -602,7 +622,7 @@ async function sendMessage() {
   userInput.value = '';
 
   addMessage('user', message, '용사 스마게');
-  showTypingIndicator();
+  showTypingIndicator(currentNpcId || undefined);
 
   try {
     const response = await agent.chat(message);
