@@ -5,7 +5,7 @@
  * 나중에 Firestore로 쉽게 교체할 수 있도록 인터페이스를 동일하게 유지합니다.
  */
 
-export type MemoryType = 'observation' | 'reflection' | 'plan';
+export type MemoryType = 'observation' | 'reflection' | 'plan' | 'knowledge';
 
 export interface Memory {
   id: string;
@@ -160,6 +160,29 @@ export class MemoryStore {
   getRecentImportanceSum(count: number = 20): number {
     const memories = this.loadMemories();
     return memories.slice(-count).reduce((sum, m) => sum + (m.importance ?? 5), 0);
+  }
+
+  /**
+   * 특정 타입의 메모리만 반환
+   */
+  getByType(type: MemoryType): Memory[] {
+    return this.loadMemories().filter(m => m.type === type);
+  }
+
+  /**
+   * 지식(knowledge) 메모리만 반환
+   * Planning 시 사용 가능한 활동/장소 파악용
+   */
+  getKnowledge(): Memory[] {
+    return this.getByType('knowledge');
+  }
+
+  /**
+   * 지식 메모리가 이미 있는지 확인 (중복 방지)
+   */
+  hasKnowledge(content: string): boolean {
+    const knowledge = this.getKnowledge();
+    return knowledge.some(k => k.content.includes(content));
   }
 
   /**

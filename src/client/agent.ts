@@ -42,6 +42,13 @@ export interface Scratch {
   isAwake?: boolean;               // 기상 여부
 }
 
+// NPC가 수행 가능한 활동 (Planning용)
+export interface AvailableActivity {
+  activity: string;       // "모루에서 철 두드리기"
+  location: string;       // "대장간 내부"
+  duration?: number;      // 기본 소요 시간 (분)
+}
+
 // 대화 메시지
 export interface ChatMessage {
   speaker: 'user' | 'npc';
@@ -465,6 +472,44 @@ JSON만 출력:`;
   }
 
   // ========================================
+  // Knowledge System (세계 지식)
+  // ========================================
+
+  /**
+   * 초기 지식 시드
+   * NPC가 세계에 대해 알고 있는 기본 사실들을 메모리에 저장
+   * 중복 저장 방지 (이미 있는 지식은 건너뜀)
+   */
+  seedKnowledge(knowledgeList: string[]): number {
+    let seededCount = 0;
+
+    for (const knowledge of knowledgeList) {
+      // 이미 같은 지식이 있는지 확인
+      if (!this.memoryStore.hasKnowledge(knowledge)) {
+        this.memoryStore.add({
+          type: 'knowledge',
+          content: knowledge,
+          importance: 9, // 지식은 높은 중요도
+        });
+        seededCount++;
+      }
+    }
+
+    if (seededCount > 0) {
+      this.log(`📚 ${seededCount}개의 세계 지식 추가됨`, 'success');
+    }
+
+    return seededCount;
+  }
+
+  /**
+   * 현재 저장된 지식 목록 반환
+   */
+  getKnowledge(): ReturnType<MemoryStore['getKnowledge']> {
+    return this.memoryStore.getKnowledge();
+  }
+
+  // ========================================
   // Planning System (논문 기반 개선)
   // ========================================
 
@@ -578,12 +623,13 @@ ${p.backstory}`;
   }
 
   /**
-   * 하루 계획 생성 (LLM 사용) - 논문 기반 개선
+   * 하루 계획 생성 (LLM 사용) - 지식 기반 개선
    *
    * 입력:
    * 1. Agent Summary (페르소나 + 목표)
-   * 2. Yesterday's Activities (어제 활동)
-   * 3. 관련 기억 (목표 진행 관련)
+   * 2. World Knowledge (세계 지식 - 가능한 활동 제약)
+   * 3. Yesterday's Activities (어제 활동)
+   * 4. Recent Observations (최근 중요 관찰 - 지식 갱신)
    */
   private async generateDailyPlan(): Promise<DailyPlanItem[]> {
     const p = this.persona;
@@ -591,17 +637,40 @@ ${p.backstory}`;
     // 1. Agent Summary 생성
     const agentSummary = this.generateAgentSummary();
 
-    // 2. 어제 활동 검색
+    // 2. 세계 지식 조회 (NEW!)
+    const knowledge = this.memoryStore.getKnowledge();
+    const knowledgeContext = knowledge.length > 0
+      ? knowledge.map(k => `- ${k.content}`).join('\n')
+      : '(세계 지식 없음)';
+
+    // 3. 어제 활동 검색
     const yesterdayActivities = this.getYesterdayActivities();
 
-    // 3. 목표 관련 기억 검색
+    // 4. 최근 중요 관찰 (importance >= 7) - 지식 갱신용 (NEW!)
+    const recentObservations = this.memoryStore.getAll()
+      .filter(m => m.type === 'observation' && (m.importance ?? 5) >= 7)
+      .slice(-5);
+    const observationContext = recentObservations.length > 0
+      ? recentObservations.map(o => `- ${o.content}`).join('\n')
+      : '(특별한 변화 없음)';
+
+    // 5. 목표 관련 기억 검색
     const goalKeywords = p.currentGoals.join(' ');
-    const relevantMemories = this.memoryStore.retrieve(goalKeywords, 5);
+    const relevantMemories = this.memoryStore.retrieve(goalKeywords, 3);
     const memoryContext = relevantMemories.length > 0
       ? relevantMemories.map(m => `- ${m.content}`).join('\n')
       : '(관련 기억 없음)';
 
     const prompt = `${agentSummary}
+
+## 내가 아는 세계 (World Knowledge)
+${knowledgeContext}
+
+## 최근 중요한 일 (Recent Observations)
+${observationContext}
+
+⚠️ **중요**: 위의 "내가 아는 세계"와 "최근 중요한 일"이 충돌하면, 최근 관찰을 우선합니다.
+예: 지식에 "침대가 있다"고 되어 있어도, 최근 "침대가 불탔다"는 관찰이 있으면 침대는 사용 불가입니다.
 
 ## 어제 활동
 ${yesterdayActivities}
@@ -612,16 +681,16 @@ ${memoryContext}
 ## 요청
 위의 정보를 바탕으로 오늘 하루의 계획을 만들어주세요.
 
-**중요**: 계획은 반드시 "현재 목표"를 달성하기 위한 활동을 포함해야 합니다!
-- 목표: ${p.currentGoals.join(', ')}
-- 이 목표들을 위해 오늘 구체적으로 무엇을 할 수 있을지 고민하세요.
+### 핵심 제약 조건
+1. **"내가 아는 세계"에 있는 장소와 도구만 사용** (없는 것은 계획 불가!)
+2. "최근 중요한 일"에 변화가 있으면 반영
+3. 목표 달성을 위한 활동을 최소 1개 포함
+   - 목표: ${p.currentGoals.join(', ')}
 
 ### 계획 조건
 - 06:00 기상부터 22:00 취침까지
-- ${p.occupation}의 일과에 맞게 현실적으로
-- 식사, 휴식 시간 포함
+- ${p.occupation}의 일과에 맞게
 - 각 활동은 30분~2시간 단위
-- **목표 달성을 위한 활동을 최소 1-2개 포함**
 
 ## 출력 형식
 반드시 다음 JSON 배열로만 출력하세요:
@@ -631,10 +700,10 @@ ${memoryContext}
 ]
 
 - time: "HH:MM" 형식
-- activity: 구체적인 활동 (예: "아침 식사", "철광석 상인 찾아보기")
-- location: 장소
+- activity: 구체적인 활동
+- location: **반드시 "내가 아는 세계"에 있는 장소만 사용**
 - duration: 분 단위
-- goalRelated: 목표와 관련된 활동이면 true (선택사항)
+- goalRelated: 목표와 관련된 활동이면 true
 
 JSON 배열만 출력:`;
 

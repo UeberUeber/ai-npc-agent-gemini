@@ -171,17 +171,9 @@ export class GameWorld {
   }
 
   private handleTileClick(x: number, y: number): void {
-    // 타일 정보 콜백 호출
+    // 타일 정보만 표시 (이동은 WASD/화살표로만)
     const tileInfo = this.getTileInfo(x, y);
     this.onTileClick?.(tileInfo);
-
-    const dx = x - this.player.position.x;
-    const dy = y - this.player.position.y;
-
-    // 인접한 타일만 이동 가능
-    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && (dx !== 0 || dy !== 0)) {
-      this.movePlayer(dx, dy);
-    }
   }
 
   // 특정 좌표의 타일 정보 가져오기

@@ -8,7 +8,7 @@
 
 import { gemini } from '../client/gemini';
 import { NPCAgent, DailyPlanItem } from '../client/agent';
-import { blacksmithPersona, blacksmithScratch } from '../client/npcs/blacksmith_john';
+import { blacksmithPersona, blacksmithScratch, blacksmithKnowledge } from '../client/npcs/blacksmith_john';
 import { GameWorld, Entity, TileInfo } from '../client/game/world';
 import { GameTime, GameTimeState } from '../client/game/time';
 
@@ -694,6 +694,9 @@ async function initChat() {
     addLog(message, type);
     updateMemoryUI(); // Reflection 후 메모리 UI 업데이트
   });
+
+  // 세계 지식 시드 (NPC가 아는 장소, 도구, 가능한 활동)
+  agent.seedKnowledge(blacksmithKnowledge);
 
   // 게임 월드 초기화 (GameTime 포함)
   initGameWorld();
