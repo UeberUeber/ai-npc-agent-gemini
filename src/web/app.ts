@@ -8,9 +8,10 @@
 
 import { gemini } from '../client/gemini';
 import { NPCAgent, DailyPlanItem } from '../client/agent';
-import { blacksmithPersona, blacksmithScratch, blacksmithKnowledge } from '../client/npcs/blacksmith_john';
+import { blacksmithJohn } from '../client/npcs/blacksmith_john';
 import { GameWorld, Entity, TileInfo } from '../client/game/world';
 import { GameTime, GameTimeState } from '../client/game/time';
+import { NpcController } from '../client/game/npc-controller';
 
 // DOM 요소
 const chatMessages = document.getElementById('chatMessages') as HTMLDivElement;
@@ -63,8 +64,9 @@ const planList = document.getElementById('planList') as HTMLDivElement;
 // 타일 정보 요소
 const tileInfoPanel = document.getElementById('tileInfo') as HTMLDivElement;
 
-// NPC Agent
+// NPC Agent & Controller
 let agent: NPCAgent;
+let npcController: NpcController;
 
 // 게임 월드
 let gameWorld: GameWorld;
@@ -115,7 +117,7 @@ function addMessage(type: 'user' | 'npc' | 'system', content: string, sender: st
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = type === 'user' ? '🧑' : type === 'npc' ? '🔨' : '⚙️';
+  avatar.textContent = type === 'user' ? '⚔️' : type === 'npc' ? '🔨' : '⚙️';
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'message-content';
@@ -214,10 +216,28 @@ function renderImportance(memory: { type: string; importance?: number }): string
   const tooltip = `
     <div class="importance-tooltip">
       <h4>📊 중요도 평가 시스템</h4>
-      <p>NPC가 기억의 중요성을 1-10점으로 평가합니다. 중요한 기억일수록 대화에서 더 잘 떠올립니다.</p>
+      <p>Stanford Generative Agents 논문 기반. <strong>LLM이 각 기억의 중요성을 1-10점으로 평가</strong>합니다.</p>
 
       <div class="section">
-        <div class="section-title">평가 기준</div>
+        <div class="section-title">🤖 LLM 평가 방식</div>
+        <div class="section-content">
+          Gemini API에게 기억 목록을 전송하고 중요도를 질문합니다:<br>
+          <code>"이 기억의 중요도를 1-10으로 평가해주세요"</code><br>
+          LLM은 기억 내용만 보고 NPC 관점에서 평가합니다.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">📝 초기값 vs LLM 평가</div>
+        <div class="section-content">
+          • <strong>저장 시</strong>: 타입별 기본값 (대화=4, 지식=9 등)<br>
+          • <strong>Reflection 시</strong>: LLM이 실제 내용 보고 재평가<br>
+          → 중요한 대화는 4→8로 상향될 수 있음
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">평가 기준 (LLM 프롬프트)</div>
         <div class="scale">
           <div class="scale-item"><span class="num">1-3</span><br>일상 인사</div>
           <div class="scale-item"><span class="num">4-6</span><br>일반 대화</div>
@@ -226,31 +246,18 @@ function renderImportance(memory: { type: string; importance?: number }): string
       </div>
 
       <div class="section">
-        <div class="section-title">왜 즉시 평가하지 않나요?</div>
+        <div class="section-title">⏰ 왜 즉시 평가하지 않나요?</div>
         <div class="section-content">
-          메모리 저장마다 LLM API를 호출하면 <strong>비용 증가</strong>와 <strong>응답 지연</strong>이 발생합니다.
-          대신 중요도 판단 없이 저장 후, 대화 10개가 쌓이면 일괄 평가합니다.
+          매 저장마다 LLM 호출 → <strong>비용↑ 지연↑</strong><br>
+          대신 <strong>대화 10개마다</strong> 미평가 기억들을 일괄 평가합니다.
         </div>
       </div>
 
       <div class="section">
-        <div class="section-title">평가 시점 (Reflection 트리거)</div>
+        <div class="section-title">🔍 메모리 검색 시 활용</div>
         <div class="section-content">
-          <strong>대화 10개가 쌓이면</strong> 자동으로:<br>
-          1️⃣ 미평가 메모리들을 LLM에게 일괄 전송<br>
-          2️⃣ 각 기억의 중요도 1-10점 평가<br>
-          3️⃣ Reflection(성찰) 메모리 생성
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">메모리 검색 시 활용</div>
-        <div class="section-content">
-          검색 스코어 공식:<br>
           <code>score = recency + importance + relevance</code><br>
-          • recency: 최근 접근할수록 높음<br>
-          • importance: 이 중요도 점수<br>
-          • relevance: 쿼리와 유사할수록 높음
+          중요도가 높을수록 대화에서 더 잘 떠올립니다.
         </div>
       </div>
 
@@ -258,8 +265,8 @@ function renderImportance(memory: { type: string; importance?: number }): string
         <div class="section-title">현재 상태</div>
         <div class="section-content">
           ${isPending
-            ? '⏳ <strong>미평가</strong> - 대화 10개 도달 시 평가 예정'
-            : `✅ <strong>평가 완료</strong> - 중요도 ${memory.importance}점`}
+            ? '⏳ <strong>미평가</strong> - 대화 10개 도달 시 LLM 평가 예정'
+            : `✅ <strong>평가 완료</strong> - LLM이 ${memory.importance}점으로 평가`}
         </div>
       </div>
     </div>
@@ -366,7 +373,7 @@ function updateTileInfoUI(tileInfo: TileInfo) {
   `;
 
   if (tileInfo.isPlayerHere) {
-    content += `<div class="tile-info-item player">🧑 용사 스마게</div>`;
+    content += `<div class="tile-info-item player">⚔️ 용사 스마게</div>`;
   }
 
   if (tileInfo.npc) {
@@ -490,23 +497,11 @@ function submitApiKey() {
 
 // NPC 기상 (하루 시작)
 async function npcWakeUp(day: number) {
-  addLog('☀️ NPC 기상 중...', 'info');
-
-  // 침대 상태 변경
-  gameWorld.updateObjectState('bed_john', '비어있음');
-
-  // 대장간 위치 (3,3)으로 이동
-  const smithyPosition = { x: 3, y: 3 };
-  gameWorld.moveNpcTo('blacksmith_john', smithyPosition, () => {
-    addLog('🔨 대장간 도착, 업무 시작', 'info');
-  });
-
   try {
-    const plan = await agent.wakeUp('06:00');
+    await npcController.wakeUp(day);
     updatePlanUI(day);
     updateScratchUI();
     updateMemoryUI();
-    addLog(`📋 ${plan.length}개의 일정 생성됨`, 'success');
   } catch (error) {
     console.error('NPC 기상 오류:', error);
     addLog('⚠️ 계획 생성 실패', 'warning');
@@ -515,26 +510,14 @@ async function npcWakeUp(day: number) {
 
 // NPC 취침 (하루 종료)
 async function npcSleep() {
-  addLog('🌙 NPC 취침 중... 침대로 이동', 'info');
-
-  // 침대 옆 위치 (8,2)로 이동 - 침대(7,2)는 blocksMovement
-  const bedSidePosition = { x: 8, y: 2 };
-
-  gameWorld.moveNpcTo('blacksmith_john', bedSidePosition, async () => {
-    addLog('🛏️ 침대 도착, 취침 시작', 'info');
-
-    // 침대 상태 변경
-    gameWorld.updateObjectState('bed_john', '존이 자는 중');
-
-    try {
-      await agent.sleep();
-      updatePlanUI();
-      updateScratchUI();
-      updateMemoryUI();
-    } catch (error) {
-      console.error('NPC 취침 오류:', error);
-    }
-  });
+  try {
+    await npcController.sleep();
+    updatePlanUI();
+    updateScratchUI();
+    updateMemoryUI();
+  } catch (error) {
+    console.error('NPC 취침 오류:', error);
+  }
 }
 
 // 게임 시간 초기화
@@ -547,11 +530,10 @@ function initGameTime() {
     onTimeChange: (state) => {
       updateGameTimeUI(state);
 
-      // 계획 진행 상황 업데이트
-      if (agent) {
-        const result = agent.updatePlanProgress(state.formatted24);
+      // 계획 진행 상황 업데이트 (NpcController가 이동도 처리)
+      if (npcController) {
+        const result = npcController.updatePlanProgress(state.formatted24);
         if (result.changed && result.newActivity) {
-          addLog(`📍 활동 변경: ${result.newActivity.activity}`, 'info');
           updatePlanUI(state.day);
           updateScratchUI();
         }
@@ -583,16 +565,22 @@ function initGameTime() {
   addLog('게임 시간 시작 (1초 = 5분)', 'info');
 }
 
-// 게임 월드 초기화
-function initGameWorld() {
-  // 게임 시간 먼저 초기화
+// 채팅 초기화
+async function initChat() {
+  // NPC 정의에서 Agent 생성
+  const npcDef = blacksmithJohn;
+  agent = new NPCAgent(npcDef.persona, npcDef.scratch);
+
+  // 세계 지식 시드 (NPC가 아는 장소, 도구, 가능한 활동)
+  agent.seedKnowledge(npcDef.knowledge);
+
+  // 게임 월드 초기화 (GameTime 포함) - NpcController보다 먼저
   initGameTime();
 
   gameWorld = new GameWorld(gameGrid, gameStatus, {
     gridSize: 10,
     onPlayerMove: (_position, npc) => {
       nearbyNpc = npc;
-      // 입력 필드 placeholder 업데이트
       if (npc) {
         userInput.placeholder = `${npc.name}에게 말하기... (근처에 있음!)`;
       } else {
@@ -600,7 +588,6 @@ function initGameWorld() {
       }
     },
     onNpcInteract: (npc) => {
-      // Enter/Space로 상호작용 시 입력 필드에 포커스
       if (npc) {
         userInput.focus();
         addLog(`${npc.name}과 대화 시작`, 'info');
@@ -611,95 +598,19 @@ function initGameWorld() {
     },
   });
 
-  // 플레이어 시작 위치 (중앙 아래)
+  // 플레이어 시작 위치
   gameWorld.setPlayerPosition(5, 7);
 
-  // 대장장이 존 배치 (대장간 위치)
-  gameWorld.addNpc({
-    id: 'blacksmith_john',
-    emoji: '👨‍🔧',
-    position: { x: 3, y: 3 },
-    name: '대장장이 존',
-    facing: 'right',    // 모루 방향을 바라봄
-    visionRange: 2,     // 실내라서 시야 범위 축소
+  // NpcController 생성 및 월드 배치
+  npcController = new NpcController(npcDef, agent, gameWorld, {
+    onLog: (message, type) => {
+      addLog(message, type);
+      updateMemoryUI();
+    },
   });
-
-  // 장애물 배치 (대장간 건물) - 벽은 시야도 차단
-  // 상단 벽 - 중앙에 "대장간" 표기
-  gameWorld.addBlockedTile(1, 1, { blocksVision: true });
-  gameWorld.addBlockedTile(2, 1, { blocksVision: true });
-  gameWorld.addBlockedTile(3, 1, { label: '대장간', blocksVision: true });
-  gameWorld.addBlockedTile(4, 1, { blocksVision: true });
-  gameWorld.addBlockedTile(5, 1, { blocksVision: true });
-  // 측면 벽
-  gameWorld.addBlockedTile(1, 2, { blocksVision: true });
-  gameWorld.addBlockedTile(5, 2, { blocksVision: true });
-  gameWorld.addBlockedTile(1, 3, { blocksVision: true });
-  gameWorld.addBlockedTile(5, 3, { blocksVision: true });
-  // 하단 벽 (입구 제외)
-  gameWorld.addBlockedTile(1, 4, { blocksVision: true });
-  gameWorld.addBlockedTile(2, 4, { blocksVision: true });
-  gameWorld.addBlockedTile(4, 4, { blocksVision: true });
-  gameWorld.addBlockedTile(5, 4, { blocksVision: true });
-
-  // 대장간 내부 오브젝트 - 모루
-  gameWorld.addObject({
-    id: 'anvil_1',
-    name: '모루',
-    emoji: '⚒️',
-    position: { x: 4, y: 2 },
-    description: '철을 두드려 무기를 만드는 모루',
-    state: '사용 가능',
-    blocksMovement: true,
-    blocksVision: false,
-  });
-
-  // 존의 집 (대장간 옆) - 벽은 시야 차단
-  // 상단 벽
-  gameWorld.addBlockedTile(6, 1, { blocksVision: true });
-  gameWorld.addBlockedTile(7, 1, { label: '존의집', blocksVision: true });
-  gameWorld.addBlockedTile(8, 1, { blocksVision: true });
-  gameWorld.addBlockedTile(9, 1, { blocksVision: true });
-  // 측면 벽
-  gameWorld.addBlockedTile(6, 2, { blocksVision: true });
-  gameWorld.addBlockedTile(9, 2, { blocksVision: true });
-  gameWorld.addBlockedTile(6, 3, { blocksVision: true });
-  gameWorld.addBlockedTile(9, 3, { blocksVision: true });
-  // 하단 벽 (입구: x:8)
-  gameWorld.addBlockedTile(6, 4, { blocksVision: true });
-  gameWorld.addBlockedTile(7, 4, { blocksVision: true });
-  gameWorld.addBlockedTile(9, 4, { blocksVision: true });
-
-  // 존의 집 내부 오브젝트 - 침대
-  gameWorld.addObject({
-    id: 'bed_john',
-    name: '침대',
-    emoji: '🛏️',
-    position: { x: 7, y: 2 },
-    description: '존이 잠을 자는 침대',
-    state: '비어있음',
-    blocksMovement: true,
-    blocksVision: false,
-  });
+  npcController.setupWorld();
 
   addLog('게임 월드 초기화 완료', 'success');
-}
-
-// 채팅 초기화
-async function initChat() {
-  agent = new NPCAgent(blacksmithPersona, blacksmithScratch);
-
-  // 로그 콜백 설정
-  agent.setLogCallback((message, type) => {
-    addLog(message, type);
-    updateMemoryUI(); // Reflection 후 메모리 UI 업데이트
-  });
-
-  // 세계 지식 시드 (NPC가 아는 장소, 도구, 가능한 활동)
-  agent.seedKnowledge(blacksmithKnowledge);
-
-  // 게임 월드 초기화 (GameTime 포함)
-  initGameWorld();
 
   // 전체 UI 초기화
   updateAllUI();
