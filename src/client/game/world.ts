@@ -26,15 +26,13 @@ export interface WorldObject {
 }
 
 export interface NpcEntity extends Entity {
-  autoMove?: boolean;
-  moveInterval?: number; // ms
-  moveArea?: { minX: number; maxX: number; minY: number; maxY: number };
   // 시야 관련
   facing?: Direction;      // 바라보는 방향
   visionRange?: number;    // 시야 거리 (기본 3)
-  // 목적지 이동
+  // 목적지 이동 (계획 기반, 틱마다 한 칸 이동)
   targetPosition?: Position;  // 이동 목적지
   onArrival?: () => void;     // 도착 시 콜백
+  recentTiles?: string[];     // 최근 방문 타일 (사이클 방지)
 }
 
 export type TileType = 'empty' | 'blocked' | 'player' | 'npc' | 'object';
@@ -77,7 +75,6 @@ export class GameWorld {
   private onPlayerMove?: (position: Position, nearbyNpc: Entity | null) => void;
   private onNpcInteract?: (npc: Entity) => void;
   private onTileClick?: (tileInfo: TileInfo) => void;
-  private npcTimers: Map<string, number> = new Map();
 
   constructor(
     gridElement: HTMLElement,
@@ -405,83 +402,69 @@ export class GameWorld {
     playerTile.appendChild(playerArrow);
   }
 
-  // NPC 자동 이동
-  private moveNpc(npc: NpcEntity): void {
-    // 플레이어 근처에 있으면 이동 안 함 (목적지 이동 중이 아닐 때만)
+  /**
+   * NPC 이동 한 칸 (틱 기반)
+   * - 목적지가 없으면 이동 안 함 (랜덤 이동 없음)
+   * - 계획에 의한 목적지로만 이동
+   */
+  private moveNpcOneStep(npc: NpcEntity): void {
+    // 목적지가 없으면 이동 안 함
     if (!npc.targetPosition) {
-      const dx = Math.abs(npc.position.x - this.player.position.x);
-      const dy = Math.abs(npc.position.y - this.player.position.y);
-      if (dx <= 1 && dy <= 1) {
-        return;
-      }
+      return;
     }
 
     // 목적지 도착 체크
-    if (npc.targetPosition) {
-      if (npc.position.x === npc.targetPosition.x && npc.position.y === npc.targetPosition.y) {
-        const callback = npc.onArrival;
-        npc.targetPosition = undefined;
-        npc.onArrival = undefined;
-        callback?.();
-        return;
+    if (npc.position.x === npc.targetPosition.x && npc.position.y === npc.targetPosition.y) {
+      const callback = npc.onArrival;
+      npc.targetPosition = undefined;
+      npc.onArrival = undefined;
+      callback?.();
+      return;
+    }
+
+    // 목적지 방향으로 이동
+    const tdx = npc.targetPosition.x - npc.position.x;
+    const tdy = npc.targetPosition.y - npc.position.y;
+    const directions: { dx: number; dy: number }[] = [];
+
+    // 목적지 방향을 우선순위로
+    if (tdx !== 0) directions.push({ dx: Math.sign(tdx), dy: 0 });
+    if (tdy !== 0) directions.push({ dx: 0, dy: Math.sign(tdy) });
+
+    // 모든 방향을 fallback으로 추가 (막다른 곳 탈출용)
+    const allDirs = [
+      { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+      { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
+    ];
+    // fallback 방향을 섞어서 사이클 방지
+    for (let i = allDirs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allDirs[i], allDirs[j]] = [allDirs[j], allDirs[i]];
+    }
+    for (const d of allDirs) {
+      if (!directions.some(existing => existing.dx === d.dx && existing.dy === d.dy)) {
+        directions.push(d);
       }
     }
 
-    // 이동 방향 결정
-    let directions: { dx: number; dy: number }[];
+    // 최근 타일 초기화 (없으면)
+    if (!npc.recentTiles) npc.recentTiles = [];
 
-    if (npc.targetPosition) {
-      // 목적지가 있으면 그 방향으로 우선 이동
-      const tdx = npc.targetPosition.x - npc.position.x;
-      const tdy = npc.targetPosition.y - npc.position.y;
-      directions = [];
-
-      // 목적지 방향을 우선순위로
-      if (tdx !== 0) directions.push({ dx: Math.sign(tdx), dy: 0 });
-      if (tdy !== 0) directions.push({ dx: 0, dy: Math.sign(tdy) });
-      // 나머지 방향 추가 (우회용)
-      if (tdx === 0) {
-        directions.push({ dx: 1, dy: 0 });
-        directions.push({ dx: -1, dy: 0 });
-      }
-      if (tdy === 0) {
-        directions.push({ dx: 0, dy: 1 });
-        directions.push({ dx: 0, dy: -1 });
-      }
-    } else {
-      // 랜덤 이동
-      directions = [
-        { dx: 0, dy: -1 },
-        { dx: 0, dy: 1 },
-        { dx: -1, dy: 0 },
-        { dx: 1, dy: 0 },
-      ];
-      // 랜덤 섞기
-      for (let i = directions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [directions[i], directions[j]] = [directions[j], directions[i]];
-      }
-    }
+    // 이동 가능한 타일 찾기
+    const validMoves: { dx: number; dy: number; isRecent: boolean }[] = [];
 
     for (const dir of directions) {
       const newX = npc.position.x + dir.dx;
       const newY = npc.position.y + dir.dy;
+      const tileKey = `${newX},${newY}`;
 
       // 범위 체크
       if (newX < 0 || newX >= this.gridSize || newY < 0 || newY >= this.gridSize) {
         continue;
       }
 
-      // 이동 영역 제한 체크 (목적지 이동 중이 아닐 때만)
-      if (!npc.targetPosition && npc.moveArea) {
-        if (newX < npc.moveArea.minX || newX > npc.moveArea.maxX ||
-            newY < npc.moveArea.minY || newY > npc.moveArea.maxY) {
-          continue;
-        }
-      }
-
       // 장애물 체크
-      if (this.blockedTiles.has(`${newX},${newY}`)) {
+      if (this.blockedTiles.has(tileKey)) {
         continue;
       }
 
@@ -506,71 +489,72 @@ export class GameWorld {
         continue;
       }
 
-      // 이동
-      npc.position.x = newX;
-      npc.position.y = newY;
+      // 이동 가능! 최근 방문 여부 체크
+      const isRecent = npc.recentTiles.includes(tileKey);
+      validMoves.push({ ...dir, isRecent });
+    }
 
-      // 방향 업데이트
-      if (dir.dy < 0) npc.facing = 'up';
-      else if (dir.dy > 0) npc.facing = 'down';
-      else if (dir.dx < 0) npc.facing = 'left';
-      else if (dir.dx > 0) npc.facing = 'right';
+    // 이동할 곳이 없으면 종료
+    if (validMoves.length === 0) return;
 
-      this.render();
+    // 최근 방문하지 않은 타일 우선, 없으면 아무거나
+    const move = validMoves.find(m => !m.isRecent) || validMoves[0];
 
-      // 플레이어가 근처에 왔는지 확인하고 콜백
-      const nearbyNpc = this.getNearbyNpc();
-      this.updateStatus(nearbyNpc);
-      this.onPlayerMove?.(this.player.position, nearbyNpc);
-      break;
+    // 이동
+    const newX = npc.position.x + move.dx;
+    const newY = npc.position.y + move.dy;
+    npc.position.x = newX;
+    npc.position.y = newY;
+
+    // 최근 타일 기록 (최대 4개 유지 - 막다른 곳 탈출용)
+    npc.recentTiles.push(`${newX},${newY}`);
+    if (npc.recentTiles.length > 4) {
+      npc.recentTiles.shift();
+    }
+
+    // 방향 업데이트
+    if (move.dy < 0) npc.facing = 'up';
+    else if (move.dy > 0) npc.facing = 'down';
+    else if (move.dx < 0) npc.facing = 'left';
+    else if (move.dx > 0) npc.facing = 'right';
+
+    this.render();
+
+    // 플레이어가 근처에 왔는지 확인하고 콜백
+    const nearbyNpc = this.getNearbyNpc();
+    this.updateStatus(nearbyNpc);
+    this.onPlayerMove?.(this.player.position, nearbyNpc);
+  }
+
+  /**
+   * 게임 틱: 모든 NPC 한 칸씩 이동 (게임 시간 시스템에서 호출)
+   */
+  tick(): void {
+    for (const npc of this.npcs) {
+      this.moveNpcOneStep(npc);
     }
   }
 
-  // NPC를 특정 위치로 이동시키기
+  /**
+   * NPC 목적지 설정 (틱마다 이동, 타이머 없음)
+   */
   moveNpcTo(npcId: string, target: Position, onArrival?: () => void): boolean {
     const npc = this.npcs.find(n => n.id === npcId);
     if (!npc) return false;
 
     npc.targetPosition = target;
     npc.onArrival = onArrival;
-
-    // 자동 이동 활성화 (이미 활성화되어 있지 않으면)
-    if (!this.npcTimers.has(npcId)) {
-      npc.autoMove = true;
-      npc.moveInterval = npc.moveInterval ?? 500;
-      this.startNpcAutoMove(npc);
-    }
-
     return true;
   }
 
-  // NPC 이동 중단
+  /**
+   * NPC 이동 중단
+   */
   stopNpcMovement(npcId: string): void {
     const npc = this.npcs.find(n => n.id === npcId);
     if (npc) {
       npc.targetPosition = undefined;
       npc.onArrival = undefined;
-    }
-  }
-
-  private startNpcAutoMove(npc: NpcEntity): void {
-    if (!npc.autoMove || npc.moveInterval === undefined) return;
-
-    // 기존 타이머가 있으면 정리
-    this.stopNpcAutoMove(npc.id);
-
-    const timerId = window.setInterval(() => {
-      this.moveNpc(npc);
-    }, npc.moveInterval);
-
-    this.npcTimers.set(npc.id, timerId);
-  }
-
-  private stopNpcAutoMove(npcId: string): void {
-    const timerId = this.npcTimers.get(npcId);
-    if (timerId !== undefined) {
-      clearInterval(timerId);
-      this.npcTimers.delete(npcId);
     }
   }
 
@@ -677,21 +661,12 @@ export class GameWorld {
       emoji: npc.emoji,
       position: { ...npc.position },
       name: npc.name,
-      autoMove: npc.autoMove,
-      moveInterval: npc.moveInterval,
-      moveArea: npc.moveArea,
       facing: npc.facing ?? 'down',
       visionRange: npc.visionRange ?? 3,
     };
     this.npcs.push(entity);
     this.render();
     this.updateStatus(this.getNearbyNpc());
-
-    // 자동 이동 시작
-    if (entity.autoMove) {
-      this.startNpcAutoMove(entity);
-    }
-
     return entity;
   }
 
@@ -799,8 +774,6 @@ export class GameWorld {
 
   // 정리
   destroy(): void {
-    for (const npcId of this.npcTimers.keys()) {
-      this.stopNpcAutoMove(npcId);
-    }
+    // 타이머 없음 - 틱 기반이므로 별도 정리 불필요
   }
 }

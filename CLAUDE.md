@@ -9,12 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### JD 핵심 요구사항 체크리스트
 1. 페르소나/환경/대화 히스토리/기억 통합 → ✅ 구현됨
 2. 장단기 기억 저장 및 색인/추출 알고리즘 → ✅ Memory Stream + Retrieval
-3. 심리/감정/의도 추론 기반 NPC 자율 발화 → ⚠️ 감정/의도 있음, **자율 발화 미구현**
+3. 심리/감정/의도 추론 기반 NPC 자율 발화 → ✅ 구현됨 (shouldInitiateConversation + generateSpontaneousUtterance)
 4. Planning 시스템 → ✅ 구현됨 (wakeUp/sleep, generateDailyPlan, updatePlanProgress)
 
 ### 우선순위 (JD 기준)
 1. ~~**Planning 시스템**: 수면/기상 → 하루 계획 생성 → 시간별 activity 변경~~ ✅ 완료
-2. **자율 발화**: NPC가 플레이어를 인식하고 먼저 말 걸기
+2. ~~**자율 발화**: NPC가 플레이어를 인식하고 먼저 말 걸기~~ ✅ 완료
 3. **중요도 합계 기반 Reflection**: 현재 "대화 10개"가 아닌 "중요도 합 > 150"으로 변경
 
 ## 프로젝트 개요

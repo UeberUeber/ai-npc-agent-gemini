@@ -37,22 +37,25 @@ export const blacksmithScratch: Scratch = {
 // ============================================================
 
 export const blacksmithKnowledge: string[] = [
-  // 장소 지식
-  '나의 대장간은 마을 동쪽에 있다. 대장간 내부에서 일한다.',
-  '대장간 바로 옆에 나의 집이 있다. 집에서 잠을 잔다.',
+  // 마을 지도 지식 (좌표계: x는 동서, y는 남북. 0,0이 북서쪽 모서리)
+  '마을은 15x15 크기다. x좌표는 동쪽으로 갈수록, y좌표는 남쪽으로 갈수록 커진다.',
 
-  // 도구/오브젝트 지식
-  '대장간에는 모루가 있다. 모루에서 무기를 만들고 수리한다.',
-  '집에는 침대가 있다. 침대에서 잠을 잔다.',
+  // 대장간 좌표 지식
+  '나의 대장간은 마을 북쪽에 있다. 입구는 (3,4)이고, 내부 영역은 x:2-4, y:2-3이다.',
+  '대장간 안에 모루가 (4,2)에 있다. 모루에서 무기를 만든다.',
+
+  // 집 좌표 지식
+  '대장간 바로 옆 동쪽에 나의 집이 있다. 입구는 (8,4)이고, 내부 영역은 x:7-8, y:2-3이다.',
+  '집 안에 침대가 (7,2)에 있다. 침대에서 잠을 잔다.',
+
+  // 여관 좌표 지식
+  '붉은 달 여관은 마을 남쪽에 있다. 입구는 (4,11)이고, 내부 영역은 x:2-7, y:8-10이다.',
+  '여관주인 로사가 운영한다. 점심때 자주 간다.',
 
   // 가능한 활동 지식
   '나는 대장장이다. 모루에서 검, 도끼, 갑옷 등을 만들 수 있다.',
   '손님이 오면 대장간에서 물건을 팔 수 있다.',
   '피곤하면 집에 가서 잠을 잔다.',
-
-  // 다른 장소 지식
-  '마을 남쪽에 붉은 달 여관이 있다. 여관주인 로사가 운영한다.',
-  '배가 고프면 여관에 가서 밥을 먹을 수 있다. 로사의 보리 스튜가 유명하다.',
 ];
 
 // ============================================================
@@ -60,22 +63,22 @@ export const blacksmithKnowledge: string[] = [
 // ============================================================
 
 export const blacksmithLocations: Record<string, LocationDef> = {
-  // 집 관련
-  '집': { position: { x: 8, y: 3 }, facing: 'left', description: '존의 집 내부' },
-  '침대': { position: { x: 8, y: 2 }, facing: 'left', description: '존의 침대 옆' },
+  // 집 관련 (입구: x:8, y:4)
+  '집': { position: { x: 8, y: 3 }, facing: 'left', description: '존의 집 내부', entrance: { x: 8, y: 4 } },
+  '침대': { position: { x: 8, y: 2 }, facing: 'left', description: '존의 침대 옆', entrance: { x: 8, y: 4 } },
 
-  // 대장간 관련
-  '대장간': { position: { x: 3, y: 3 }, facing: 'right', description: '대장간 입구' },
-  '대장간 내부': { position: { x: 3, y: 3 }, facing: 'right', description: '대장간 작업 공간' },
-  '모루': { position: { x: 3, y: 2 }, facing: 'right', description: '모루 앞' },
-  '대장간 뒤편': { position: { x: 2, y: 3 }, facing: 'down', description: '대장간 뒤' },
+  // 대장간 관련 (입구: x:3, y:4)
+  '대장간': { position: { x: 3, y: 3 }, facing: 'right', description: '대장간 작업 공간', entrance: { x: 3, y: 4 } },
+  '대장간 내부': { position: { x: 3, y: 3 }, facing: 'right', description: '대장간 작업 공간', entrance: { x: 3, y: 4 } },
+  '모루': { position: { x: 3, y: 2 }, facing: 'right', description: '모루 앞', entrance: { x: 3, y: 4 } },
+  '대장간 뒤편': { position: { x: 2, y: 3 }, facing: 'down', description: '대장간 뒤', entrance: { x: 3, y: 4 } },
 
-  // 기타
+  // 기타 (야외 장소는 entrance 없음)
   '마을 거리': { position: { x: 5, y: 5 }, facing: 'down', description: '마을 중앙' },
 
-  // 다른 NPC 장소 (나중에 방문 가능)
-  '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관' },
-  '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관' },
+  // 다른 NPC 장소 (여관 입구: x:4-5, y:11)
+  '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관', entrance: { x: 4, y: 11 } },
+  '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관', entrance: { x: 4, y: 11 } },
 };
 
 // ============================================================

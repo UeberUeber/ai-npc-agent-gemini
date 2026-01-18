@@ -712,9 +712,12 @@ function initGameTime() {
     startDay: 1,
     startHour: 6, // 새벽 6시 시작
     startMinute: 0,
-    timeScale: 5, // 실시간 1초 = 게임 5분
+    timeScale: 1, // 실시간 1초 = 게임 1분
     onTimeChange: (state) => {
       updateGameTimeUI(state);
+
+      // NPC 이동 틱 (게임 1분마다 한 칸 이동)
+      gameWorld.tick();
 
       // 모든 NPC의 계획 진행 상황 업데이트
       for (const [npcId, controller] of npcControllers.entries()) {
@@ -753,7 +756,7 @@ function initGameTime() {
 
   // 시간 흐름 시작
   gameTime.start();
-  addLog('게임 시간 시작 (1초 = 5분)', 'info');
+  addLog('게임 시간 시작 (1초 = 1분)', 'info');
 }
 
 // 채팅 초기화
@@ -811,6 +814,28 @@ async function initChat() {
         } else if (npcDef.id === 'innkeeper_rosa') {
           updateRosaMemoryUI();
         }
+      },
+      // 자율 발화 콜백 (논문: Reaction & Dialogue System)
+      onSpontaneousUtterance: (utterance, npcId) => {
+        const npcAgent = agents.get(npcId);
+        const npcName = npcAgent?.getName() || 'NPC';
+
+        // 1. 메시지 표시
+        addMessage('npc', utterance, npcName);
+
+        // 2. 현재 NPC 설정 및 채팅 활성화
+        currentNpcId = npcId;
+        userInput.disabled = false;
+        userInput.placeholder = `${npcName}에게 답하기...`;
+        userInput.focus();
+      },
+      // NPC간 대화 콜백
+      onNpcConversation: (speakerId, speakerName, utterance) => {
+        addMessage('npc', utterance, speakerName);
+      },
+      // 다른 NPC Agent 가져오기
+      getOtherNpcAgent: (npcId) => {
+        return agents.get(npcId) || null;
       },
     });
     controller.setupWorld();

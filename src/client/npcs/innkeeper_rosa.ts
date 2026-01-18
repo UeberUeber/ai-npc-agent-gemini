@@ -37,24 +37,28 @@ export const innkeeperScratch: Scratch = {
 // ============================================================
 
 export const innkeeperKnowledge: string[] = [
-  // 장소 지식
-  '나의 여관은 마을 남쪽에 있다. 붉은 달 여관이라고 불린다.',
-  '여관 1층은 식당이고, 2층에는 손님방이 있다.',
-  '여관 뒤편에 나의 침실이 있다. 거기서 잠을 잔다.',
+  // 마을 지도 지식 (좌표계: x는 동서, y는 남북. 0,0이 북서쪽 모서리)
+  '마을은 15x15 크기다. x좌표는 동쪽으로 갈수록, y좌표는 남쪽으로 갈수록 커진다.',
 
-  // 도구/오브젝트 지식
-  '여관에는 주방이 있다. 주방에서 요리를 한다.',
-  '여관에는 카운터가 있다. 카운터에서 손님을 맞이하고 계산을 한다.',
-  '침실에는 침대가 있다. 침대에서 잠을 잔다.',
+  // 여관 좌표 지식
+  '나의 여관 "붉은 달 여관"은 마을 남쪽에 있다. 입구는 (4,11)이고, 내부 영역은 x:2-7, y:8-10이다.',
+  '여관 안에 주방이 (2,9)에 있다. 주방에서 요리를 한다.',
+  '여관 안에 카운터가 (7,8)에 있다. 카운터에서 손님을 맞이한다.',
+  '여관에 식탁이 여러 개 있다. (3,9), (5,9), (4,10), (6,10)에 있다.',
+
+  // 침실 좌표 지식
+  '여관 동쪽에 나의 침실이 있다. 입구는 (12,11)이고, 내부 영역은 x:11-12, y:8-10이다.',
+  '침실 안에 침대가 (11,8)에 있다. 침대에서 잠을 잔다.',
+
+  // 대장간 좌표 지식
+  '대장간은 마을 북쪽에 있다. 입구는 (3,4)이고, 내부 영역은 x:2-4, y:2-3이다.',
+  '대장장이 존이 운영한다. 존은 오랜 단골이라 점심때 여관에 자주 온다.',
 
   // 가능한 활동 지식
   '나는 여관주인이다. 손님에게 음식과 숙박을 제공한다.',
   '주방에서 보리 스튜, 구운 고기, 빵 등을 만들 수 있다.',
   '손님들에게서 마을 소식과 바깥 세상 이야기를 듣는다.',
-  '피곤하면 뒤편 침실에서 잠을 잔다.',
-
-  // 관계 지식
-  '대장장이 존은 오랜 단골이다. 과묵하지만 좋은 사람이다.',
+  '피곤하면 침실에 가서 잠을 잔다.',
 ];
 
 // ============================================================
@@ -62,20 +66,23 @@ export const innkeeperKnowledge: string[] = [
 // ============================================================
 
 export const innkeeperLocations: Record<string, LocationDef> = {
-  // 침실 관련
-  '집': { position: { x: 12, y: 9 }, facing: 'left', description: '로사의 침실' },
-  '침실': { position: { x: 12, y: 9 }, facing: 'left', description: '로사의 침실' },
-  '침대': { position: { x: 12, y: 8 }, facing: 'left', description: '로사의 침대 옆' },
+  // 침실 관련 (입구: x:12, y:11)
+  '집': { position: { x: 12, y: 9 }, facing: 'left', description: '로사의 침실', entrance: { x: 12, y: 11 } },
+  '침실': { position: { x: 12, y: 9 }, facing: 'left', description: '로사의 침실', entrance: { x: 12, y: 11 } },
+  '침대': { position: { x: 12, y: 8 }, facing: 'left', description: '로사의 침대 옆', entrance: { x: 12, y: 11 } },
 
-  // 여관 관련
-  '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀' },
-  '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀' },
-  '카운터': { position: { x: 7, y: 8 }, facing: 'left', description: '접수 카운터' },
-  '주방': { position: { x: 2, y: 8 }, facing: 'right', description: '주방 조리대 앞' },
-  '식탁': { position: { x: 4, y: 9 }, facing: 'down', description: '손님 식탁 앞' },
+  // 여관 관련 (입구: x:4-5, y:11)
+  '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
+  '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
+  '카운터': { position: { x: 7, y: 8 }, facing: 'left', description: '접수 카운터', entrance: { x: 4, y: 11 } },
+  '주방': { position: { x: 2, y: 8 }, facing: 'right', description: '주방 조리대 앞', entrance: { x: 4, y: 11 } },
+  '식탁': { position: { x: 4, y: 9 }, facing: 'down', description: '손님 식탁 앞', entrance: { x: 4, y: 11 } },
 
-  // 기타
+  // 기타 (야외 장소는 entrance 없음)
   '마을 거리': { position: { x: 7, y: 5 }, facing: 'down', description: '마을 중앙' },
+
+  // 다른 NPC 장소 (대장간 입구: x:3, y:4)
+  '대장간': { position: { x: 3, y: 3 }, facing: 'right', description: '존의 대장간', entrance: { x: 3, y: 4 } },
 };
 
 // ============================================================

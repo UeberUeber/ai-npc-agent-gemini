@@ -412,6 +412,7 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 - 1-3문장으로 짧게 대답하세요.
 - 관련 기억이 있으면 자연스럽게 언급할 수 있습니다.
 - 현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.
+- **중요**: 최근 대화나 관련 기억에서 이미 한 이야기는 반복하지 마세요. 같은 정보를 또 말하지 말고, 새로운 내용이나 다른 관점으로 대화하세요.
 
 ## 출력 형식
 반드시 다음 JSON 형식으로만 출력하세요:
@@ -874,5 +875,185 @@ JSON 배열만 출력:`;
       content,
       importance,
     });
+  }
+
+  // ========================================
+  // 자율 발화 시스템 (Autonomous Speech)
+  // 논문: Reaction & Dialogue System
+  // ========================================
+
+  /**
+   * 반응할지 판단 (논문: "Should agent react?")
+   * 규칙 기반 사전 필터 + LLM 최종 판단
+   */
+  async shouldInitiateConversation(observation: string): Promise<boolean> {
+    // 1. 규칙 기반 사전 필터 (LLM 비용 절감)
+    if (!this.scratch.isAwake) return false;  // 자는 중
+    if (this.scratch.currentMood === 'angry') return false;  // 화난 상태
+
+    // 2. 관련 기억 검색
+    const memories = this.memoryStore.retrieve(observation, 3);
+
+    // 3. LLM 판단
+    const prompt = `당신은 ${this.persona.name}입니다.
+현재: ${this.scratch.currentActivity} (기분: ${this.scratch.currentMood})
+관찰: ${observation}
+관련 기억: ${memories.map(m => m.content).join('; ') || '없음'}
+
+이 상황에서 플레이어에게 먼저 말을 걸어야 할까요?
+당신의 성격(${this.persona.traits.join(', ')})을 고려하세요.
+
+YES 또는 NO만 답하세요:`;
+
+    try {
+      const response = await gemini.generate(prompt);
+      return response.toUpperCase().includes('YES');
+    } catch (error) {
+      console.error('반응 판단 실패:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 자발적 발화 생성 (논문: "Dialogue Generation - Turn 1")
+   */
+  async generateSpontaneousUtterance(observation: string): Promise<string> {
+    const memories = this.memoryStore.retrieve(observation, 5);
+
+    const prompt = `## 당신의 정체
+이름: ${this.persona.name}
+성격: ${this.persona.traits.join(', ')}
+말투: ${this.persona.speechStyle}
+
+## 현재 상태
+활동: ${this.scratch.currentActivity}
+기분: ${this.scratch.currentMood}
+위치: ${this.scratch.currentLocation}
+
+## 상황
+${observation}
+
+## 관련 기억
+${memories.map(m => `- ${m.content}`).join('\n') || '(없음)'}
+
+## 지시
+위 상황에서 플레이어에게 먼저 말을 거세요.
+- 1-2문장으로 짧게
+- 말투: ${this.persona.speechStyle}
+- 현재 하던 일을 하면서 말하는 것처럼
+- 대화 내용만 출력 (행동 묘사나 따옴표 없이)`;
+
+    try {
+      const response = await gemini.generate(prompt);
+
+      // 메모리에 저장
+      this.memoryStore.add({
+        type: 'observation',
+        content: `나는 플레이어에게 먼저 말을 걸었다: "${response}"`,
+        importance: 5,
+      });
+
+      return response;
+    } catch (error) {
+      console.error('자발적 발화 생성 실패:', error);
+      return '...어서 오게.';  // 폴백
+    }
+  }
+
+  // ========================================
+  // NPC간 대화 시스템 (NPC-to-NPC Dialogue)
+  // ========================================
+
+  /**
+   * 다른 NPC에게 먼저 말 걸기
+   */
+  async initiateNpcConversation(targetName: string, observation: string): Promise<string> {
+    const memories = this.memoryStore.retrieve(`${targetName} 대화`, 3);
+
+    const prompt = `## 당신의 정체
+이름: ${this.persona.name}
+성격: ${this.persona.traits.join(', ')}
+말투: ${this.persona.speechStyle}
+
+## 현재 상태
+활동: ${this.scratch.currentActivity}
+기분: ${this.scratch.currentMood}
+
+## 상황
+${observation}
+
+## ${targetName}에 대한 기억
+${memories.map(m => `- ${m.content}`).join('\n') || '(특별한 기억 없음)'}
+
+## 지시
+${targetName}에게 먼저 말을 거세요.
+- 1-2문장으로 짧게
+- 말투: ${this.persona.speechStyle}
+- 대화 내용만 출력 (행동 묘사나 따옴표 없이)`;
+
+    try {
+      const response = await gemini.generate(prompt);
+
+      // 메모리에 저장
+      this.memoryStore.add({
+        type: 'observation',
+        content: `나는 ${targetName}에게 말을 걸었다: "${response}"`,
+        importance: 4,
+      });
+
+      return response;
+    } catch (error) {
+      console.error('NPC 대화 시작 실패:', error);
+      return '...';
+    }
+  }
+
+  /**
+   * 다른 NPC의 말에 응답하기
+   */
+  async respondToNpc(speakerName: string, utterance: string): Promise<string> {
+    const memories = this.memoryStore.retrieve(`${speakerName}`, 3);
+
+    const prompt = `## 당신의 정체
+이름: ${this.persona.name}
+성격: ${this.persona.traits.join(', ')}
+말투: ${this.persona.speechStyle}
+
+## 현재 상태
+활동: ${this.scratch.currentActivity}
+기분: ${this.scratch.currentMood}
+
+## 상황
+${speakerName}이(가) 당신에게 말했습니다: "${utterance}"
+
+## ${speakerName}에 대한 기억
+${memories.map(m => `- ${m.content}`).join('\n') || '(특별한 기억 없음)'}
+
+## 지시
+${speakerName}의 말에 응답하세요.
+- 1-2문장으로 짧게
+- 말투: ${this.persona.speechStyle}
+- 대화 내용만 출력 (행동 묘사나 따옴표 없이)`;
+
+    try {
+      const response = await gemini.generate(prompt);
+
+      // 메모리에 저장
+      this.memoryStore.add({
+        type: 'observation',
+        content: `${speakerName}이(가) 나에게 말했다: "${utterance}"`,
+        importance: 4,
+      });
+      this.memoryStore.add({
+        type: 'observation',
+        content: `나는 ${speakerName}에게 대답했다: "${response}"`,
+        importance: 4,
+      });
+
+      return response;
+    } catch (error) {
+      console.error('NPC 응답 실패:', error);
+      return '...그래.';
+    }
   }
 }

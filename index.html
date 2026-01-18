@@ -80,7 +80,7 @@
     .left-panel .panel-content {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     .game-world {
@@ -89,7 +89,7 @@
       align-items: flex-start;
       justify-content: flex-start;
       flex: 1;
-      gap: 12px;
+      gap: 6px;
       padding: 4px 0;
       min-height: 0;
     }
@@ -131,10 +131,11 @@
       padding: 6px;
       border-radius: 8px;
       aspect-ratio: 1;
-      /* 높이 기준으로 정사각형 크기 계산 (뷰포트 높이 - 헤더/푸터 여백) */
-      height: calc(100vh - 320px);
+      /* 높이 기준으로 정사각형 크기 계산 */
+      height: min(calc(100vh - 280px), 500px);
       width: auto;
       max-width: 100%;
+      flex-shrink: 0;
     }
 
     /* 기본 타일 - 잔디 */
@@ -1157,6 +1158,8 @@
       padding: 10px 14px;
       font-size: 0.8rem;
       border: 1px solid rgba(139, 92, 246, 0.3);
+      min-height: 80px;
+      flex-shrink: 0;
     }
 
     .tile-info-header {

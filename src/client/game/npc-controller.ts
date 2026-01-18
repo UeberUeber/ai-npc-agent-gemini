@@ -30,6 +30,9 @@ export interface NpcControllerOptions {
   onLog?: (message: string, type: 'info' | 'success' | 'warning') => void;
   onStateChange?: (state: NpcState, npcId: string) => void;
   onArrival?: (location: string, npcId: string) => void;
+  onSpontaneousUtterance?: (utterance: string, npcId: string) => void;  // 자율 발화
+  onNpcConversation?: (speakerId: string, speakerName: string, utterance: string) => void;  // NPC간 대화
+  getOtherNpcAgent?: (npcId: string) => NPCAgent | null;  // 다른 NPC Agent 가져오기
 }
 
 export class NpcController {
@@ -45,6 +48,10 @@ export class NpcController {
     seenEntities: new Map(),
     seenObjects: new Map(),
   };
+
+  // NPC간 대화 추적 (중복 방지)
+  private recentNpcConversations: Map<string, number> = new Map();  // npcId → timestamp
+  private static NPC_CONVERSATION_COOLDOWN = 60000;  // 1분 쿨다운
 
   constructor(
     definition: NpcDefinition,
@@ -167,6 +174,7 @@ export class NpcController {
 
   /**
    * NPC를 특정 장소로 이동
+   * 건물 내부 장소의 경우 입구를 먼저 경유
    */
   moveTo(locationName: string, onArrival?: () => void): boolean {
     const location = this.resolveLocation(locationName);
@@ -192,6 +200,32 @@ export class NpcController {
       onArrival?.();
     };
 
+    // 입구가 정의된 경우: 입구 → 목적지 순서로 이동
+    if (location.entrance) {
+      // 현재 NPC 위치 확인
+      const npc = this.world.getNpcs().find(n => n.id === this.definition.id);
+      if (npc) {
+        // 이미 건물 내부에 있는지 확인 (입구와의 거리로 판단)
+        const distToEntrance = Math.abs(npc.position.x - location.entrance.x) +
+                               Math.abs(npc.position.y - location.entrance.y);
+        const distToTarget = Math.abs(npc.position.x - location.position.x) +
+                             Math.abs(npc.position.y - location.position.y);
+
+        // 목적지보다 입구가 멀면 이미 내부에 있을 가능성 → 직접 이동
+        if (distToTarget < distToEntrance) {
+          return this.world.moveNpcTo(this.definition.id, location.position, arrived);
+        }
+      }
+
+      // 입구로 먼저 이동, 도착하면 최종 목적지로 이동
+      this.log(`🚪 ${locationName} 입구로 이동`, 'info');
+      return this.world.moveNpcTo(this.definition.id, location.entrance, () => {
+        this.log(`🚪 입구 도착, 내부로 진입`, 'info');
+        this.world.moveNpcTo(this.definition.id, location.position, arrived);
+      });
+    }
+
+    // 입구가 없는 경우: 직접 이동
     return this.world.moveNpcTo(this.definition.id, location.position, arrived);
   }
 
@@ -402,13 +436,89 @@ export class NpcController {
   async perceiveAndRemember(): Promise<PerceptionResult> {
     const result = this.perceive();
 
+    // 기존: 관찰 저장
     if (result.newEntities.length > 0 ||
         result.changedObjects.length > 0 ||
         result.exitedEntities.length > 0) {
       await this.savePerceptions(result);
     }
 
+    // 플레이어 감지 시 자율 발화 트리거
+    const playerDetected = result.newEntities.find(e => e.entity.id === 'player');
+    if (playerDetected) {
+      await this.tryInitiateConversation(playerDetected.description);
+    }
+
+    // NPC 감지 시 NPC간 대화 트리거
+    const npcDetected = result.newEntities.find(
+      e => e.entity.id !== 'player' && e.entity.id !== this.definition.id
+    );
+    if (npcDetected) {
+      await this.tryConversationWithNpc(npcDetected.entity.id, npcDetected.entity.name || npcDetected.entity.id, npcDetected.description);
+    }
+
     return result;
+  }
+
+  /**
+   * 자율 발화 시도 (논문: Reaction & Dialogue System)
+   */
+  private async tryInitiateConversation(observation: string): Promise<void> {
+    this.log('🎯 플레이어 감지! 반응 판단 중...', 'info');
+
+    const shouldReact = await this.agent.shouldInitiateConversation(observation);
+
+    if (!shouldReact) {
+      this.log('💭 반응하지 않기로 결정', 'info');
+      return;
+    }
+
+    this.log('💬 자발적 발화 생성 중...', 'info');
+    const utterance = await this.agent.generateSpontaneousUtterance(observation);
+
+    // UI에 전달
+    this.options.onSpontaneousUtterance?.(utterance, this.definition.id);
+    this.log(`🗣️ "${utterance.slice(0, 30)}..."`, 'success');
+  }
+
+  /**
+   * NPC간 대화 시도
+   */
+  private async tryConversationWithNpc(targetId: string, targetName: string, observation: string): Promise<void> {
+    // 쿨다운 체크 (최근에 대화했으면 스킵)
+    const lastConvo = this.recentNpcConversations.get(targetId);
+    if (lastConvo && Date.now() - lastConvo < NpcController.NPC_CONVERSATION_COOLDOWN) {
+      return;
+    }
+
+    // 자는 중이면 스킵
+    if (!this.agent.getScratch().isAwake) {
+      return;
+    }
+
+    this.log(`🤝 ${targetName} 감지! 대화 시도...`, 'info');
+
+    // 1. 이 NPC가 먼저 말 걸기
+    const utterance1 = await this.agent.initiateNpcConversation(targetName, observation);
+    this.options.onNpcConversation?.(this.definition.id, this.agent.getName(), utterance1);
+    this.log(`💬 "${utterance1.slice(0, 30)}..."`, 'info');
+
+    // 2. 상대 NPC가 응답
+    const targetAgent = this.options.getOtherNpcAgent?.(targetId);
+    if (targetAgent) {
+      const utterance2 = await targetAgent.respondToNpc(this.agent.getName(), utterance1);
+      this.options.onNpcConversation?.(targetId, targetAgent.getName(), utterance2);
+      this.log(`💬 ${targetName}: "${utterance2.slice(0, 30)}..."`, 'info');
+
+      // 3. 한 턴 더 (선택적)
+      const utterance3 = await this.agent.respondToNpc(targetAgent.getName(), utterance2);
+      this.options.onNpcConversation?.(this.definition.id, this.agent.getName(), utterance3);
+      this.log(`💬 "${utterance3.slice(0, 30)}..."`, 'info');
+    }
+
+    // 쿨다운 기록
+    this.recentNpcConversations.set(targetId, Date.now());
+    this.log(`✅ ${targetName}과(와) 대화 완료`, 'success');
   }
 
   // ============================================================

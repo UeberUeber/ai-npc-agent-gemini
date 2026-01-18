@@ -12,6 +12,7 @@ export interface LocationDef {
   position: Position;
   facing?: Direction;  // 도착 시 바라볼 방향
   description?: string;
+  entrance?: Position; // 건물 내부 장소의 경우 입구 좌표 (이동 시 먼저 경유)
 }
 
 // 벽 정의

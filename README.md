@@ -26,6 +26,7 @@ npm run dev
 | **Retrieval** | Recency + Importance + Relevance 점수로 관련 기억 검색 |
 | **Reflection** | 10회 대화마다 LLM으로 중요도 재평가 후 상위 수준 인사이트 생성 |
 | **Planning** | 지식 기반 하루 계획 생성 (Knowledge + Goals + Yesterday's Activities) |
+| **Autonomous Speech** | 플레이어 감지 시 NPC가 먼저 말 걸기 (논문: Reaction & Dialogue System) |
 | **Emotion System** | JSON 응답에서 mood/intent 파싱, 감정 변화를 메모리에 기록 |
 | **Perception** | 시야 내 엔티티/오브젝트 감지 → 변화만 자연어로 메모리 저장 (델타 기반) |
 
@@ -465,8 +466,57 @@ if (!lastPos) {
 │ 2. savePerceptions()                │
 │    → 자연어 변환                    │
 │    → observation으로 메모리 저장    │
+│                                     │
+│ 3. 플레이어 감지 시 자율 발화 트리거│
+│    → tryInitiateConversation()      │
 └─────────────────────────────────────┘
 ```
+
+### 10. Autonomous Speech (자율 발화)
+
+NPC가 플레이어를 시야에서 감지하면 **먼저 말을 거는** 시스템입니다.
+(논문: Reaction & Dialogue System)
+
+#### 흐름
+
+```
+플레이어가 NPC 시야에 진입
+    ↓
+perceive() → newEntities에 player 감지
+    ↓
+tryInitiateConversation()
+    ↓
+┌─────────────────────────────────────┐
+│ 1. shouldInitiateConversation()     │
+│    → 규칙 기반 필터 (자는 중? 화남?)│
+│    → LLM 판단: "말 걸어야 할까?"    │
+│    → YES / NO                       │
+│                                     │
+│ 2. generateSpontaneousUtterance()   │ (YES인 경우)
+│    → 관련 기억 검색                 │
+│    → 자발적 발화 생성               │
+│    → 메모리에 저장                  │
+│                                     │
+│ 3. onSpontaneousUtterance 콜백      │
+│    → UI에 메시지 표시               │
+│    → 채팅 입력 활성화               │
+└─────────────────────────────────────┘
+```
+
+#### 규칙 기반 사전 필터 (LLM 비용 절감)
+
+```typescript
+// 자동 거부 조건
+if (!this.scratch.isAwake) return false;  // 자는 중
+if (this.scratch.currentMood === 'angry') return false;  // 화난 상태
+```
+
+#### 시스템 로그 표시
+
+- 🎯 플레이어 감지! 반응 판단 중...
+- 💭 반응하지 않기로 결정 (NO인 경우)
+- 💬 자발적 발화 생성 중... (YES인 경우)
+- 🗣️ "어서 오게..." (발화 표시)
 
 ## Conversation Flow
 
@@ -605,6 +655,17 @@ clear(): void
 ```
 
 ## Changelog
+
+### 2025-01-18 (자율 발화 시스템)
+- **Autonomous Speech 구현** (Generative Agents 논문: Reaction & Dialogue System)
+  - 플레이어가 NPC 시야에 들어오면 NPC가 먼저 말 걸기
+  - `shouldInitiateConversation()`: 규칙 기반 필터 + LLM 판단 (YES/NO)
+  - `generateSpontaneousUtterance()`: 자발적 발화 생성
+  - `tryInitiateConversation()`: 인식 → 판단 → 발화 → UI 전달
+- **수정된 파일**
+  - `agent.ts`: 자율 발화 메서드 2개 추가
+  - `npc-controller.ts`: `perceiveAndRemember()` 수정, `onSpontaneousUtterance` 콜백
+  - `app.ts`: 자율 발화 콜백 연결 (채팅 UI 표시)
 
 ### 2025-01-18 (UI/레이아웃 개선)
 - **게임 그리드 반응형 개선**: 지도가 화면에 스크롤 없이 꽉 차게 표시
