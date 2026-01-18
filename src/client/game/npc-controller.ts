@@ -33,6 +33,7 @@ export interface NpcControllerOptions {
   onSpontaneousUtterance?: (utterance: string, npcId: string) => void;  // 자율 발화
   onNpcConversation?: (speakerId: string, speakerName: string, utterance: string) => void;  // NPC간 대화
   getOtherNpcAgent?: (npcId: string) => NPCAgent | null;  // 다른 NPC Agent 가져오기
+  getCurrentTime?: () => string;  // 현재 게임 시간 가져오기 (재플래닝용)
 }
 
 export class NpcController {
@@ -60,6 +61,8 @@ export class NpcController {
   // 대화 상태 관리
   private stateBeforeConversing: NpcState | null = null;
   private conversationTurns: number = 0;
+  private conversationStartTime: string | null = null;  // 재플래닝 판단용
+  private static REPLANNING_THRESHOLD_MINUTES = 30;  // 게임 내 30분 이상 대화 시 재플래닝
 
   /**
    * 두 NPC간 대화 키 생성 (정렬하여 양방향 동일 키)
@@ -192,6 +195,7 @@ export class NpcController {
     // 현재 상태 저장 (대화 종료 후 복원용)
     this.stateBeforeConversing = this.state;
     this.conversationTurns = 0;
+    this.conversationStartTime = this.options.getCurrentTime?.() || null;
 
     // 이동 중이면 정지
     if (this.state === 'moving') {
@@ -210,20 +214,37 @@ export class NpcController {
   }
 
   /**
-   * 대화 종료 - 이전 상태로 복원
+   * 대화 종료 - 이전 상태로 복원, 필요 시 재플래닝
    */
   async endConversation(): Promise<void> {
     if (this.state !== 'conversing') return;
 
     this.log(`💬 대화 종료 (${this.conversationTurns}턴)`, 'info');
 
-    // 대화 중 시간이 많이 흘렀으면 재플래닝 필요할 수 있음
-    // 현재는 이전 계획 그대로 진행 (향후 시간 경과량에 따른 재플래닝 추가 가능)
+    // 대화 중 시간이 많이 흘렀으면 재플래닝
+    const currentTime = this.options.getCurrentTime?.();
+    const needsReplanning = this.checkNeedsReplanning(currentTime);
 
     // 이전 상태로 복원
     const previousState = this.stateBeforeConversing || 'idle';
     this.stateBeforeConversing = null;
     this.conversationTurns = 0;
+    this.conversationStartTime = null;
+
+    if (needsReplanning && currentTime) {
+      this.log('🔄 대화로 시간이 흘러 계획 재조정 중...', 'info');
+      const result = this.agent.updatePlanProgress(currentTime);
+      if (result.changed && result.newActivity) {
+        this.log(`📋 새 활동: ${result.newActivity.activity} @ ${result.newActivity.location}`, 'success');
+
+        // 새 활동 위치로 이동
+        this.setState('idle');
+        if (result.newActivity.location) {
+          this.moveTo(result.newActivity.location);
+        }
+        return;
+      }
+    }
 
     this.setState(previousState);
 
@@ -232,6 +253,37 @@ export class NpcController {
       this.log(`🚶 이동 재개: ${this.currentTargetLocation}`, 'info');
       this.moveTo(this.currentTargetLocation);
     }
+  }
+
+  /**
+   * 재플래닝 필요 여부 확인 (게임 내 30분 이상 대화)
+   */
+  private checkNeedsReplanning(currentTime: string | undefined): boolean {
+    if (!this.conversationStartTime || !currentTime) return false;
+
+    const startMinutes = this.timeToMinutes(this.conversationStartTime);
+    const currentMinutes = this.timeToMinutes(currentTime);
+
+    // 자정 넘어가는 경우 처리
+    let elapsedMinutes = currentMinutes - startMinutes;
+    if (elapsedMinutes < 0) {
+      elapsedMinutes += 24 * 60;  // 다음 날로 넘어감
+    }
+
+    if (elapsedMinutes >= NpcController.REPLANNING_THRESHOLD_MINUTES) {
+      this.log(`⏰ 대화 시간: ${elapsedMinutes}분 (재플래닝 필요)`, 'info');
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * "HH:MM" 형식을 분 단위로 변환
+   */
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
   }
 
   /**

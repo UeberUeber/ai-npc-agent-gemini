@@ -143,9 +143,9 @@ function addLog(message: string, type: 'info' | 'success' | 'warning' = 'info') 
   }
 }
 
-// 대화 카운터 업데이트
+// Reflection 카운터 업데이트 (10회 대화 후 Reflection 자동 실행)
 function updateChatCounter() {
-  chatCounter.textContent = `대화: ${chatCount}/10`;
+  chatCounter.textContent = `Reflection: ${chatCount}/10`;
 }
 
 // 메시지 추가

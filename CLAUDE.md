@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 우선순위 (JD 기준)
 1. ~~**Planning 시스템**: 수면/기상 → 하루 계획 생성 → 시간별 activity 변경~~ ✅ 완료
 2. ~~**자율 발화**: NPC가 플레이어를 인식하고 먼저 말 걸기~~ ✅ 완료
-3. **중요도 합계 기반 Reflection**: 현재 "대화 10개"가 아닌 "중요도 합 > 150"으로 변경
+3. ~~**Reflection 시스템**: 대화 10회마다 LLM으로 중요도 재평가 후 인사이트 생성~~ ✅ 완료
 
 ## 프로젝트 개요
 
