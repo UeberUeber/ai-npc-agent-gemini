@@ -399,10 +399,13 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
     const currentPlan = this.getCurrentPlanItem();
     const nextPlan = this.getNextPlanItem();
 
+    // 이동 계획인데 이미 도착했는지 확인
+    const actualActivity = this.getActualActivity(currentPlan);
+
     let planContext = '';
     if (currentPlan) {
       planContext = `\n\n## 현재 일정
-- 지금 하는 일: ${currentPlan.activity}
+- 지금 하는 일: ${actualActivity}
 - 시작 시간: ${currentPlan.time}
 - 예상 소요: ${currentPlan.duration}분
 - 장소: ${currentPlan.location || s.currentLocation}`;
@@ -444,7 +447,7 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 
     // 6. 응답 지침 (JSON 형식 요청)
     const activityHint = currentPlan
-      ? `현재 "${currentPlan.activity}" 중이므로, 이 상황에 맞게 대화하세요. (예: 바쁘다고 하거나, 하던 일을 언급하거나, 잠깐 멈추고 대화하거나)`
+      ? `현재 "${actualActivity}" 중이므로, 이 상황에 맞게 대화하세요. (예: 바쁘다고 하거나, 하던 일을 언급하거나, 잠깐 멈추고 대화하거나)`
       : `현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.`;
 
     const instruction = `## 응답 지침
@@ -802,21 +805,51 @@ JSON 배열만 출력:`;
   }
 
   /**
-   * 기본 일과 (LLM 실패 시)
+   * 기본 일과 (LLM 실패 시) - NPC별 분기
    */
   private getDefaultDailyPlan(): DailyPlanItem[] {
+    // NPC ID 또는 직업으로 분기
+    if (this.persona.id === 'innkeeper_rosa' || this.persona.occupation === '여관주인') {
+      return this.getInnkeeperDefaultPlan();
+    }
+    // 기본값: 대장장이
+    return this.getBlacksmithDefaultPlan();
+  }
+
+  /**
+   * 대장장이 기본 일과
+   */
+  private getBlacksmithDefaultPlan(): DailyPlanItem[] {
     return [
       { time: '06:00', activity: '기상 및 아침 준비', location: '집', duration: 60, status: 'pending' },
       { time: '07:00', activity: '아침 식사', location: '집', duration: 30, status: 'pending' },
-      { time: '07:30', activity: '대장간으로 이동', location: '마을 거리', duration: 15, status: 'pending' },
-      { time: '08:00', activity: '대장간 열기 및 불 피우기', location: '대장간', duration: 30, status: 'pending' },
-      { time: '08:30', activity: '주문받은 물건 제작', location: '대장간 내부', duration: 180, status: 'pending' },
-      { time: '12:00', activity: '점심 식사', location: '대장간 뒤편', duration: 60, status: 'pending' },
-      { time: '13:00', activity: '오후 작업 - 수리 및 제작', location: '대장간 내부', duration: 240, status: 'pending' },
+      { time: '07:30', activity: '대장간으로 이동', location: '대장간', duration: 30, status: 'pending' },
+      { time: '08:00', activity: '대장간 불 피우기', location: '모루', duration: 30, status: 'pending' },
+      { time: '08:30', activity: '무기 제작', location: '모루', duration: 210, status: 'pending' },
+      { time: '12:00', activity: '점심 식사', location: '붉은 달 여관', duration: 60, status: 'pending' },
+      { time: '13:00', activity: '오후 작업 - 수리 및 제작', location: '모루', duration: 240, status: 'pending' },
       { time: '17:00', activity: '대장간 정리', location: '대장간', duration: 60, status: 'pending' },
       { time: '18:00', activity: '저녁 식사', location: '집', duration: 60, status: 'pending' },
       { time: '19:00', activity: '개인 시간', location: '집', duration: 120, status: 'pending' },
-      { time: '21:00', activity: '취침 준비', location: '집', duration: 60, status: 'pending' },
+      { time: '21:00', activity: '취침 준비', location: '침대', duration: 60, status: 'pending' },
+    ];
+  }
+
+  /**
+   * 여관주인 기본 일과
+   */
+  private getInnkeeperDefaultPlan(): DailyPlanItem[] {
+    return [
+      { time: '06:00', activity: '기상 및 아침 준비', location: '집', duration: 60, status: 'pending' },
+      { time: '07:00', activity: '여관 청소 및 준비', location: '여관', duration: 60, status: 'pending' },
+      { time: '08:00', activity: '아침 요리 준비', location: '주방', duration: 60, status: 'pending' },
+      { time: '09:00', activity: '카운터에서 손님 맞이', location: '카운터', duration: 180, status: 'pending' },
+      { time: '12:00', activity: '점심 요리', location: '주방', duration: 60, status: 'pending' },
+      { time: '13:00', activity: '카운터에서 손님 맞이', location: '카운터', duration: 240, status: 'pending' },
+      { time: '17:00', activity: '저녁 요리 준비', location: '주방', duration: 60, status: 'pending' },
+      { time: '18:00', activity: '저녁 손님 맞이', location: '카운터', duration: 120, status: 'pending' },
+      { time: '20:00', activity: '여관 정리', location: '여관', duration: 60, status: 'pending' },
+      { time: '21:00', activity: '취침 준비', location: '침대', duration: 60, status: 'pending' },
     ];
   }
 
@@ -908,6 +941,41 @@ JSON 배열만 출력:`;
       return undefined;
     }
     return this.scratch.dailyPlan[this.scratch.currentPlanIndex];
+  }
+
+  /**
+   * 실제 활동 상태 판단 (이동 완료 여부 반영)
+   * - 이동 계획인데 목적지에 이미 도착했으면 "도착 - 활동 시작"으로 변환
+   * - 그 외에는 원본 activity 반환
+   */
+  private getActualActivity(plan: DailyPlanItem | undefined): string {
+    if (!plan) {
+      return this.scratch.currentActivity;
+    }
+
+    // 이동 관련 키워드
+    const travelKeywords = ['이동', '가다', '향하다', '출발', '가기'];
+    const isTravelPlan = travelKeywords.some(kw => plan.activity.includes(kw));
+
+    if (isTravelPlan && plan.location) {
+      // 목적지에 이미 도착했는지 확인
+      const currentLoc = this.scratch.currentLocation.toLowerCase();
+      const destLoc = plan.location.toLowerCase();
+
+      // 위치가 일치하거나 포함 관계면 도착으로 판단
+      const hasArrived = currentLoc.includes(destLoc) || destLoc.includes(currentLoc);
+
+      if (hasArrived) {
+        // 다음 계획이 있으면 그 활동 준비, 없으면 일반적 표현
+        const nextPlan = this.getNextPlanItem();
+        if (nextPlan) {
+          return `${plan.location}에 도착 - ${nextPlan.activity} 준비 중`;
+        }
+        return `${plan.location}에 도착 - 다음 활동 준비 중`;
+      }
+    }
+
+    return plan.activity;
   }
 
   /**
