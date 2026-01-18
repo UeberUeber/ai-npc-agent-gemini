@@ -187,10 +187,18 @@ export class NpcController {
   }
 
   /**
-   * 대화 시작 - 이동 정지, 상태 저장
+   * 대화 시작 - 이동 정지, 상태 저장, 자는 NPC 깨우기
    */
-  startConversation(): void {
+  async startConversation(): Promise<void> {
     if (this.state === 'conversing') return;
+
+    // 자는 중이면 깨움 (대화하려면 깨어있어야 함)
+    const scratch = this.agent.getScratch();
+    if (!scratch.isAwake) {
+      const currentTime = this.options.getCurrentTime?.() || '06:00';
+      this.log('☀️ 대화로 인해 기상!', 'info');
+      await this.agent.wakeUp(currentTime);
+    }
 
     // 현재 상태 저장 (대화 종료 후 복원용)
     this.stateBeforeConversing = this.state;
@@ -614,8 +622,8 @@ export class NpcController {
 
     this.log('💬 자발적 발화 생성 중...', 'info');
 
-    // 대화 시작 - 이동 정지
-    this.startConversation();
+    // 대화 시작 - 이동 정지, 자는 중이면 깨움
+    await this.startConversation();
 
     const utterance = await this.agent.generateSpontaneousUtterance(observation);
 

@@ -634,6 +634,12 @@ async function sendMessage() {
   sendButton.disabled = true;
   userInput.value = '';
 
+  // 대화 시작 처리 (자는 NPC면 깨움, 이동 중이면 정지)
+  const controller = npcControllers.get(currentNpcId);
+  if (controller) {
+    await controller.startConversation();
+  }
+
   addMessage('user', message, '용사 스마게');
   showTypingIndicator(currentNpcId || undefined);
 
@@ -644,8 +650,7 @@ async function sendMessage() {
     chatCount = agent.getChatCount();
     updateChatCounter();
 
-    // 대화 턴 증가 및 지속 여부 체크
-    const controller = npcControllers.get(currentNpcId);
+    // 대화 턴 증가 및 지속 여부 체크 (위에서 이미 controller 선언됨)
     if (controller) {
       controller.incrementConversationTurn();
 
@@ -916,6 +921,9 @@ async function initChat() {
         addMessage('npc', utterance, npcName);
 
         // 2. 현재 NPC 설정 및 채팅 활성화
+        // 중요: nearbyNpc도 설정해야 플레이어가 응답할 수 있음
+        const npcEntity = gameWorld.getNpcs().find(n => n.id === npcId) || null;
+        nearbyNpc = npcEntity;
         currentNpcId = npcId;
         userInput.disabled = false;
         userInput.placeholder = `${npcName}에게 답하기...`;
