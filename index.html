@@ -496,6 +496,117 @@
     .memory-item.reflection .type {
       color: #a78bfa;
     }
+
+    /* 중요도 툴팁 */
+    .importance {
+      position: relative;
+      cursor: help;
+    }
+
+    .importance.pending {
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .importance.evaluated {
+      color: #4ade80;
+    }
+
+    .importance-tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 320px;
+      padding: 16px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      transition: opacity 0.2s, visibility 0.2s;
+      text-align: left;
+      font-style: normal;
+      line-height: 1.5;
+    }
+
+    .importance-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: #1e293b;
+    }
+
+    .importance:hover .importance-tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .importance-tooltip h4 {
+      color: #f59e0b;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .importance-tooltip p {
+      color: #d1d5db;
+      font-size: 0.8rem;
+      margin-bottom: 12px;
+    }
+
+    .importance-tooltip .section {
+      margin-bottom: 12px;
+    }
+
+    .importance-tooltip .section-title {
+      color: #60a5fa;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .importance-tooltip .section-content {
+      color: #9ca3af;
+      font-size: 0.78rem;
+    }
+
+    .importance-tooltip code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.75rem;
+      color: #fcd34d;
+    }
+
+    .importance-tooltip .scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+    }
+
+    .importance-tooltip .scale-item {
+      text-align: center;
+      font-size: 0.7rem;
+    }
+
+    .importance-tooltip .scale-item .num {
+      font-weight: bold;
+      color: #f59e0b;
+    }
   </style>
 </head>
 <body>

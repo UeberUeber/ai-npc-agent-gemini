@@ -176,6 +176,72 @@ function updateHistoryUI() {
     .join('');
 }
 
+// 중요도 표시 생성 (미평가/평가완료 구분 + 툴팁)
+function renderImportance(memory: { type: string; importance: number }): string {
+  // observation 타입이고 importance가 5(기본값)이면 미평가
+  const isPending = memory.type === 'observation' && memory.importance === 5;
+  // reflection은 생성 시 importance 8로 설정되므로 항상 평가됨
+
+  const statusClass = isPending ? 'pending' : 'evaluated';
+  const displayText = isPending ? '⏳ 미평가' : `✓ ${memory.importance}/10`;
+
+  const tooltip = `
+    <div class="importance-tooltip">
+      <h4>📊 중요도 평가 시스템</h4>
+      <p>NPC가 기억의 중요성을 1-10점으로 평가합니다. 중요한 기억일수록 대화에서 더 잘 떠올립니다.</p>
+
+      <div class="section">
+        <div class="section-title">평가 기준</div>
+        <div class="scale">
+          <div class="scale-item"><span class="num">1-3</span><br>일상 인사</div>
+          <div class="scale-item"><span class="num">4-6</span><br>일반 대화</div>
+          <div class="scale-item"><span class="num">7-10</span><br>중요 사건</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">왜 즉시 평가하지 않나요?</div>
+        <div class="section-content">
+          메모리 저장마다 LLM API를 호출하면 <strong>비용 증가</strong>와 <strong>응답 지연</strong>이 발생합니다.
+          대신 기본값 <code>5</code>로 저장 후 일괄 평가하여 효율성을 높였습니다.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">평가 시점 (Reflection 트리거)</div>
+        <div class="section-content">
+          <strong>대화 10개가 쌓이면</strong> 자동으로:<br>
+          1️⃣ 미평가 메모리들을 LLM에게 일괄 전송<br>
+          2️⃣ 각 기억의 중요도 1-10점 평가<br>
+          3️⃣ Reflection(성찰) 메모리 생성
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">메모리 검색 시 활용</div>
+        <div class="section-content">
+          검색 스코어 공식:<br>
+          <code>score = recency + importance + relevance</code><br>
+          • recency: 최근 접근할수록 높음<br>
+          • importance: 이 중요도 점수<br>
+          • relevance: 쿼리와 유사할수록 높음
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">현재 상태</div>
+        <div class="section-content">
+          ${isPending
+            ? '⏳ <strong>미평가</strong> - 대화 10개 도달 시 평가 예정'
+            : `✅ <strong>평가 완료</strong> - 중요도 ${memory.importance}점`}
+        </div>
+      </div>
+    </div>
+  `;
+
+  return `<div class="importance ${statusClass}">${displayText}${tooltip}</div>`;
+}
+
 // 메모리 스트림 UI 업데이트
 function updateMemoryUI() {
   const memories = agent.getRecentMemories(10);
@@ -192,7 +258,7 @@ function updateMemoryUI() {
       <div class="memory-item ${m.type === 'reflection' ? 'reflection' : ''}">
         <div class="type">${m.type}</div>
         <div>${m.content}</div>
-        <div class="importance">중요도: ${m.importance}/10</div>
+        ${renderImportance(m)}
       </div>
     `
     )
