@@ -643,6 +643,33 @@ async function sendMessage() {
     addMessage('npc', response, agent.getName());
     chatCount = agent.getChatCount();
     updateChatCounter();
+
+    // 대화 턴 증가 및 지속 여부 체크
+    const controller = npcControllers.get(currentNpcId);
+    if (controller) {
+      controller.incrementConversationTurn();
+
+      // NPC가 대화를 계속할지 판단 (성격, 다음 일정에 따라)
+      const currentTime = gameTime.getTimeString();
+      const turns = controller.getConversationTurns();
+      const shouldContinue = await agent.checkShouldContinue(currentTime, turns);
+
+      if (!shouldContinue.continue) {
+        // NPC가 대화를 끊기로 결정
+        if (shouldContinue.utterance) {
+          addMessage('npc', shouldContinue.utterance, agent.getName());
+        }
+        addLog(`💭 ${agent.getName()}: 대화 종료 결정 (${turns}턴)`, 'info');
+
+        // 대화 종료 및 재플래닝
+        await controller.endConversation();
+
+        // 채팅 비활성화
+        userInput.disabled = true;
+        userInput.placeholder = 'NPC가 떠났습니다...';
+      }
+    }
+
     // 해당 NPC UI 업데이트
     if (currentNpcId === 'blacksmith_john') {
       updateScratchUI();

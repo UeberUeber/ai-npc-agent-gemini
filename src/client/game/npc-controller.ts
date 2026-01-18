@@ -293,6 +293,13 @@ export class NpcController {
     return this.state === 'conversing';
   }
 
+  /**
+   * 현재 대화 턴 수 반환
+   */
+  getConversationTurns(): number {
+    return this.conversationTurns;
+  }
+
   // ============================================================
   // 이동
   // ============================================================

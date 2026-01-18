@@ -395,12 +395,30 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 현재 목표: ${p.currentGoals.join(' / ')}
 말투: ${p.speechStyle}`;
 
-    // 2. 현재 상태
+    // 2. 현재 상태 + 계획 컨텍스트
+    const currentPlan = this.getCurrentPlanItem();
+    const nextPlan = this.getNextPlanItem();
+
+    let planContext = '';
+    if (currentPlan) {
+      planContext = `\n\n## 현재 일정
+- 지금 하는 일: ${currentPlan.activity}
+- 시작 시간: ${currentPlan.time}
+- 예상 소요: ${currentPlan.duration}분
+- 장소: ${currentPlan.location || s.currentLocation}`;
+      if (currentPlan.goalRelated) {
+        planContext += `\n- 이 일은 당신의 목표(${p.currentGoals[0]})와 관련 있습니다.`;
+      }
+      if (nextPlan) {
+        planContext += `\n- 다음 일정: ${nextPlan.time}에 "${nextPlan.activity}"`;
+      }
+    }
+
     const state = `## 현재 상태
 위치: ${s.currentLocation}
 하고 있는 일: ${s.currentActivity}
 기분: ${s.currentMood}
-시간: ${s.currentTime}`;
+시간: ${s.currentTime}${planContext}`;
 
     // 3. 관련 기억
     let memories = '## 관련 기억\n';
@@ -425,12 +443,16 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
     const current = `## 용사 스마게의 말\n"${userMessage}"`;
 
     // 6. 응답 지침 (JSON 형식 요청)
+    const activityHint = currentPlan
+      ? `현재 "${currentPlan.activity}" 중이므로, 이 상황에 맞게 대화하세요. (예: 바쁘다고 하거나, 하던 일을 언급하거나, 잠깐 멈추고 대화하거나)`
+      : `현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.`;
+
     const instruction = `## 응답 지침
 - 당신은 ${p.name}입니다. 위 정체성과 상태에 맞게 대답하세요.
 - 말투: ${p.speechStyle}
 - 1-3문장으로 짧게 대답하세요.
 - 관련 기억이 있으면 자연스럽게 언급할 수 있습니다.
-- 현재 하던 일(${s.currentActivity})을 하면서 대화하는 것처럼 반응하세요.
+- **현재 활동 반영**: ${activityHint}
 - **중요**: 최근 대화나 관련 기억에서 이미 한 이야기는 반복하지 마세요. 같은 정보를 또 말하지 말고, 새로운 내용이나 다른 관점으로 대화하세요.
 
 ## 출력 형식
@@ -889,6 +911,20 @@ JSON 배열만 출력:`;
   }
 
   /**
+   * 다음 계획 아이템 (현재 일정 다음에 할 일)
+   */
+  getNextPlanItem(): DailyPlanItem | undefined {
+    if (!this.scratch.dailyPlan || this.scratch.currentPlanIndex === undefined) {
+      return undefined;
+    }
+    const nextIndex = this.scratch.currentPlanIndex + 1;
+    if (nextIndex >= this.scratch.dailyPlan.length) {
+      return undefined;
+    }
+    return this.scratch.dailyPlan[nextIndex];
+  }
+
+  /**
    * 관찰 내용을 메모리에 추가 (외부에서 호출용)
    * 예: "플레이어가 대장간 앞에서 시야에 나타났다"
    */
@@ -1178,6 +1214,35 @@ ${recentHistory}
       console.error('대화 계속 판단 실패:', error);
       return { continue: true };
     }
+  }
+
+  /**
+   * 대화 지속 여부 체크 (간편 래퍼)
+   * - 현재 시간과 대화 턴수만 전달하면 내부에서 다음 일정 계산
+   */
+  async checkShouldContinue(
+    currentTime: string,
+    conversationTurns: number
+  ): Promise<{ continue: boolean; utterance?: string }> {
+    if (!this.scratch.dailyPlan || this.scratch.dailyPlan.length === 0) {
+      return { continue: true };
+    }
+
+    const currentMinutes = this.timeToMinutes(currentTime);
+    const currentIndex = this.scratch.currentPlanIndex ?? 0;
+
+    // 다음 일정 찾기
+    let nextPlan: DailyPlanItem | null = null;
+    let minutesUntilNext = 999;
+
+    if (currentIndex + 1 < this.scratch.dailyPlan.length) {
+      nextPlan = this.scratch.dailyPlan[currentIndex + 1];
+      const nextMinutes = this.timeToMinutes(nextPlan.time);
+      minutesUntilNext = nextMinutes - currentMinutes;
+      if (minutesUntilNext < 0) minutesUntilNext += 24 * 60;
+    }
+
+    return this.shouldContinueConversation(nextPlan, minutesUntilNext, conversationTurns);
   }
 
   /**
