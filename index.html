@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI NPC 대화 시스템</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    /* 3열 레이아웃 */
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    .status-dot.offline {
+      background: #6b7280;
+    }
+
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    /* 왼쪽 패널 - 다른 NPC (플레이스홀더) */
+    .left-panel {
+      background: rgba(139, 92, 246, 0.05);
+      border-color: rgba(139, 92, 246, 0.2);
+    }
+
+    .left-panel .panel-header {
+      background: rgba(139, 92, 246, 0.1);
+    }
+
+    .placeholder-npc {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #6b7280;
+      text-align: center;
+    }
+
+    .placeholder-npc .icon {
+      font-size: 4rem;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .placeholder-npc p {
+      font-size: 0.9rem;
+      max-width: 200px;
+    }
+
+    /* 가운데 패널 - 플레이어 입력 */
+    .center-panel {
+      flex: 1.2;
+      background: rgba(59, 130, 246, 0.05);
+      border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .center-panel .panel-header {
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .message.user .message-avatar {
+      background: rgba(59, 130, 246, 0.3);
+    }
+
+    .message.npc .message-avatar {
+      background: rgba(245, 158, 11, 0.3);
+    }
+
+    .message-content {
+      max-width: 70%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.5;
+    }
+
+    .message.user .message-content {
+      background: rgba(59, 130, 246, 0.2);
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.npc .message-content {
+      background: rgba(245, 158, 11, 0.15);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-sender {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    .input-area {
+      padding: 16px 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .input-wrapper {
+      display: flex;
+      gap: 12px;
+    }
+
+    .input-wrapper input {
+      flex: 1;
+      padding: 14px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #e0e0e0;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-wrapper input:focus {
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    .input-wrapper input::placeholder {
+      color: #6b7280;
+    }
+
+    .input-wrapper button {
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    .input-wrapper button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .input-wrapper button:active {
+      transform: translateY(0);
+    }
+
+    .input-wrapper button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* 오른쪽 패널 - 대장장이 존 */
+    .right-panel {
+      background: rgba(245, 158, 11, 0.05);
+      border-color: rgba(245, 158, 11, 0.2);
+    }
+
+    .right-panel .panel-header {
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    .npc-info {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+    }
+
+    .npc-info h3 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+      color: #f59e0b;
+    }
+
+    .npc-stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.9rem;
+      gap: 12px;
+    }
+
+    .npc-stat:last-child {
+      border-bottom: none;
+    }
+
+    .npc-stat .label {
+      color: #9ca3af;
+      flex-shrink: 0;
+      min-width: 40px;
+    }
+
+    .npc-stat .value {
+      color: #e0e0e0;
+      text-align: right;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .memory-section h3 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+      color: #f59e0b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .clear-btn {
+      margin-left: auto;
+      padding: 4px 8px;
+      font-size: 0.7rem;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #ef4444;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .clear-btn:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    .memory-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .memory-item {
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .memory-item .type {
+      font-size: 0.7rem;
+      color: #f59e0b;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .memory-item .importance {
+      font-size: 0.7rem;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .empty-state {
+      color: #6b7280;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 20px;
+    }
+
+    /* 로딩 인디케이터 */
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+    }
+
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      background: #f59e0b;
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    /* API 키 모달 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #1e293b;
+      padding: 32px;
+      border-radius: 16px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+
+    .modal-content h2 {
+      margin-bottom: 8px;
+      color: #f59e0b;
+    }
+
+    .modal-content p {
+      margin-bottom: 24px;
+      color: #9ca3af;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .modal-content input {
+      width: 100%;
+      padding: 14px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #e0e0e0;
+      font-size: 1rem;
+      margin-bottom: 16px;
+      outline: none;
+    }
+
+    .modal-content input:focus {
+      border-color: rgba(245, 158, 11, 0.5);
+    }
+
+    .modal-content button {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .modal-content button:hover {
+      opacity: 0.9;
+    }
+
+    .modal-content a {
+      display: block;
+      margin-top: 16px;
+      color: #60a5fa;
+      font-size: 0.85rem;
+      text-decoration: none;
+    }
+
+    .modal-content a:hover {
+      text-decoration: underline;
+    }
+
+    .message.system .message-avatar {
+      background: rgba(107, 114, 128, 0.3);
+    }
+
+    .message.system .message-content {
+      background: rgba(107, 114, 128, 0.2);
+    }
+
+    /* 시스템 로그 */
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.75rem;
+    }
+
+    .log-item {
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      border-left: 3px solid #6b7280;
+      line-height: 1.3;
+    }
+
+    .log-item.info {
+      border-left-color: #3b82f6;
+      color: #93c5fd;
+    }
+
+    .log-item.success {
+      border-left-color: #22c55e;
+      color: #86efac;
+    }
+
+    .log-item.warning {
+      border-left-color: #f59e0b;
+      color: #fcd34d;
+    }
+
+    .log-item .timestamp {
+      color: #6b7280;
+      margin-right: 8px;
+    }
+
+    /* Reflection 타입 메모리 강조 */
+    .memory-item.reflection {
+      background: rgba(139, 92, 246, 0.2);
+      border-left: 3px solid #8b5cf6;
+    }
+
+    .memory-item.reflection .type {
+      color: #a78bfa;
+    }
+  </style>
+</head>
+<body>
+  <!-- API 키 입력 모달 -->
+  <div class="modal" id="apiKeyModal">
+    <div class="modal-content">
+      <h2>Gemini API 키 입력</h2>
+      <p>대화를 시작하려면 Google Gemini API 키가 필요합니다. 키는 브라우저에만 저장되며 서버로 전송되지 않습니다.</p>
+      <input type="password" id="apiKeyInput" placeholder="API 키를 입력하세요" />
+      <button id="apiKeySubmit">시작하기</button>
+      <a href="https://aistudio.google.com/apikey" target="_blank">API 키 발급받기 (Google AI Studio)</a>
+    </div>
+  </div>
+  <div class="container">
+    <!-- 왼쪽: 다른 NPC (플레이스홀더) -->
+    <div class="panel left-panel">
+      <div class="panel-header">
+        <div class="status-dot offline"></div>
+        <h2>상인 루나</h2>
+      </div>
+      <div class="panel-content">
+        <div class="placeholder-npc">
+          <div class="icon">🏪</div>
+          <p>아직 구현되지 않았습니다. 다음 업데이트에서 만나보세요!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 가운데: 플레이어 대화 -->
+    <div class="panel center-panel">
+      <div class="panel-header">
+        <div class="status-dot"></div>
+        <h2>대화</h2>
+      </div>
+      <div class="panel-content">
+        <div class="chat-messages" id="chatMessages">
+          <!-- 메시지들이 여기에 추가됨 -->
+        </div>
+      </div>
+      <div class="input-area">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            id="userInput"
+            placeholder="대장장이 존에게 말하기..."
+            autocomplete="off"
+          />
+          <button id="sendButton">전송</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 대장장이 존 -->
+    <div class="panel right-panel">
+      <div class="panel-header">
+        <div class="status-dot"></div>
+        <h2>대장장이 존</h2>
+      </div>
+      <div class="panel-content">
+        <!-- 페르소나 -->
+        <div class="npc-info">
+          <h3>페르소나 (Persona)</h3>
+          <div class="npc-stat">
+            <span class="label">이름</span>
+            <span class="value" id="npcName">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">나이</span>
+            <span class="value" id="npcAge">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">직업</span>
+            <span class="value" id="npcOccupation">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">성격</span>
+            <span class="value" id="npcTraits">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">배경</span>
+            <span class="value" id="npcBackstory" style="font-size: 0.8rem;">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">목표</span>
+            <span class="value" id="npcGoals" style="font-size: 0.8rem;">-</span>
+          </div>
+        </div>
+
+        <!-- 환경/현재상태 (Scratch) -->
+        <div class="npc-info">
+          <h3>환경/상태 (Scratch)</h3>
+          <div class="npc-stat">
+            <span class="label">위치</span>
+            <span class="value" id="npcLocation">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">활동</span>
+            <span class="value" id="npcActivity">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">기분</span>
+            <span class="value" id="npcMood">-</span>
+          </div>
+          <div class="npc-stat">
+            <span class="label">시간</span>
+            <span class="value" id="npcTime">-</span>
+          </div>
+        </div>
+
+        <!-- 대화 히스토리 -->
+        <div class="memory-section">
+          <h3>대화 히스토리 (History)</h3>
+          <div class="memory-list" id="historyList">
+            <div class="empty-state">아직 대화가 없습니다</div>
+          </div>
+        </div>
+
+        <!-- 메모리 스트림 -->
+        <div class="memory-section">
+          <h3>
+            메모리 스트림 (Memory) <span id="memoryCount" style="color: #6b7280; font-weight: normal;">0개</span>
+            <button id="clearMemoryBtn" class="clear-btn" title="메모리 초기화">초기화</button>
+          </h3>
+          <div class="memory-list" id="memoryList">
+            <div class="empty-state">아직 기억이 없습니다</div>
+          </div>
+        </div>
+
+        <!-- 시스템 로그 -->
+        <div class="memory-section">
+          <h3>시스템 로그 <span id="chatCounter" style="color: #6b7280; font-weight: normal; font-size: 0.8rem;">대화: 0/10</span></h3>
+          <div class="log-list" id="systemLog">
+            <div class="log-item info">시스템 초기화 대기중...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/web/app.ts"></script>
+</body>
+</html>

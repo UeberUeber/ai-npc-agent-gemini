@@ -1,0 +1,22 @@
+{
+  "name": "ai-npc-gemini",
+  "version": "0.1.0",
+  "description": "Generative Agents style AI NPC system with Phaser.js and Gemini API",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "concurrently": "^9.2.1",
+    "dotenv": "^17.2.3",
+    "phaser": "^3.80.1",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.4.0"
+  }
+}

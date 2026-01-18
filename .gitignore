@@ -1,0 +1,36 @@
+# Environment variables (API keys)
+.env
+.env.local
+.env.*.local
+
+# Claude Code settings
+.claude/
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Test coverage
+coverage/
