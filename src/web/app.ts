@@ -1001,6 +1001,30 @@ apiKeyInput.addEventListener('keydown', (e) => {
 
 clearMemoryBtn.addEventListener('click', clearMemory);
 
+// 툴팁 위치 계산 (position: fixed 사용 시 필요)
+document.addEventListener('mouseenter', (e) => {
+  const target = e.target as HTMLElement;
+  if (target.classList.contains('importance')) {
+    const tooltip = target.querySelector('.importance-tooltip') as HTMLElement;
+    if (tooltip) {
+      const rect = target.getBoundingClientRect();
+      // 툴팁을 트리거 요소 위에 표시
+      const tooltipWidth = 320; // CSS에서 정의된 너비
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+
+      // 화면 왼쪽 경계 체크
+      if (left < 10) left = 10;
+      // 화면 오른쪽 경계 체크
+      if (left + tooltipWidth > window.innerWidth - 10) {
+        left = window.innerWidth - tooltipWidth - 10;
+      }
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+    }
+  }
+}, true);
+
 // 초기화
 function init() {
   if (!gemini.hasApiKey()) {

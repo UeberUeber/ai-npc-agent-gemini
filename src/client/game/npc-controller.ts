@@ -267,6 +267,14 @@ export class NpcController {
       this.log(`🚶 이동 재개: ${this.currentTargetLocation}`, 'info');
       this.moveTo(this.currentTargetLocation);
     }
+    // 자는 상태에서 깨어났거나 idle이면, 현재 계획에 따라 이동 시작
+    else if (previousState === 'idle') {
+      const currentPlan = this.agent.getCurrentPlanItem();
+      if (currentPlan?.location) {
+        this.log(`📋 계획에 따라 이동 시작: ${currentPlan.location}`, 'info');
+        this.moveTo(currentPlan.location);
+      }
+    }
   }
 
   /**
@@ -359,19 +367,17 @@ export class NpcController {
       // 현재 NPC 위치 확인
       const npc = this.world.getNpcs().find(n => n.id === this.definition.id);
       if (npc) {
-        // 이미 건물 내부에 있는지 확인 (입구와의 거리로 판단)
-        const distToEntrance = Math.abs(npc.position.x - location.entrance.x) +
-                               Math.abs(npc.position.y - location.entrance.y);
-        const distToTarget = Math.abs(npc.position.x - location.position.x) +
-                             Math.abs(npc.position.y - location.position.y);
+        // 영역 기반 판단: 현재 위치가 목표 건물의 영역 내부인지 확인
+        const isInsideTargetArea = this.isPositionInTargetArea(npc.position, locationName);
 
-        // 목적지보다 입구가 멀면 이미 내부에 있을 가능성 → 직접 이동
-        if (distToTarget < distToEntrance) {
+        if (isInsideTargetArea) {
+          // 이미 목표 건물 안에 있음 → 직접 이동
+          this.log(`📍 이미 ${locationName} 내부에 있음 - 직접 이동`, 'info');
           return this.world.moveNpcTo(this.definition.id, location.position, arrived);
         }
       }
 
-      // 입구로 먼저 이동, 도착하면 최종 목적지로 이동
+      // 다른 곳에서 오는 경우: 입구로 먼저 이동, 도착하면 최종 목적지로 이동
       this.log(`🚪 ${locationName} 입구로 이동`, 'info');
       return this.world.moveNpcTo(this.definition.id, location.entrance, () => {
         this.log(`🚪 입구 도착, 내부로 진입`, 'info');
@@ -381,6 +387,37 @@ export class NpcController {
 
     // 입구가 없는 경우: 직접 이동
     return this.world.moveNpcTo(this.definition.id, location.position, arrived);
+  }
+
+  /**
+   * 현재 위치가 목표 장소의 영역 내부인지 확인
+   * - areas 정의가 있으면 영역 매칭
+   * - 없으면 목적지 좌표 ±1 범위로 판단
+   */
+  private isPositionInTargetArea(pos: Position, locationName: string): boolean {
+    // 1. areas 정의에서 해당 장소의 영역 찾기
+    if (this.definition.areas && this.definition.areas.length > 0) {
+      for (const area of this.definition.areas) {
+        // 장소명이 영역명에 포함되거나 같은 경우
+        if (locationName.includes(area.name) || area.name.includes(locationName)) {
+          // 현재 위치가 이 영역 안에 있는지 확인
+          if (pos.x >= area.minX && pos.x <= area.maxX &&
+              pos.y >= area.minY && pos.y <= area.maxY) {
+            return true;
+          }
+        }
+      }
+    }
+
+    // 2. areas가 없거나 매칭되는 영역이 없으면 목적지 좌표 ±1 범위로 판단
+    const location = this.resolveLocation(locationName);
+    if (location) {
+      const dx = Math.abs(pos.x - location.position.x);
+      const dy = Math.abs(pos.y - location.position.y);
+      return dx <= 1 && dy <= 1;
+    }
+
+    return false;
   }
 
   /**
