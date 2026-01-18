@@ -5,7 +5,7 @@
  */
 
 import { Persona, Scratch } from '../agent';
-import { NpcDefinition, LocationDef, WallDef, ObjectDef } from './types';
+import { NpcDefinition, LocationDef, WallDef, ObjectDef, AreaDef } from './types';
 
 // ============================================================
 // 기본 정보
@@ -49,6 +49,10 @@ export const blacksmithKnowledge: string[] = [
   '나는 대장장이다. 모루에서 검, 도끼, 갑옷 등을 만들 수 있다.',
   '손님이 오면 대장간에서 물건을 팔 수 있다.',
   '피곤하면 집에 가서 잠을 잔다.',
+
+  // 다른 장소 지식
+  '마을 남쪽에 붉은 달 여관이 있다. 여관주인 로사가 운영한다.',
+  '배가 고프면 여관에 가서 밥을 먹을 수 있다. 로사의 보리 스튜가 유명하다.',
 ];
 
 // ============================================================
@@ -68,7 +72,22 @@ export const blacksmithLocations: Record<string, LocationDef> = {
 
   // 기타
   '마을 거리': { position: { x: 5, y: 5 }, facing: 'down', description: '마을 중앙' },
+
+  // 다른 NPC 장소 (나중에 방문 가능)
+  '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관' },
+  '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '붉은 달 여관' },
 };
+
+// ============================================================
+// 영역 정의 (좌표 → 장소명 역변환용)
+// ============================================================
+
+export const blacksmithAreas: AreaDef[] = [
+  // 대장간 내부 (벽 x:1-5, y:1-4 → 내부 x:2-4, y:2-3)
+  { name: '대장간', minX: 2, maxX: 4, minY: 2, maxY: 3, priority: 0 },
+  // 존의 집 내부 (벽 x:6-9, y:1-4 → 내부 x:7-8, y:2-3)
+  { name: '집', minX: 7, maxX: 8, minY: 2, maxY: 3, priority: 0 },
+];
 
 // ============================================================
 // 월드 배치 정보
@@ -147,6 +166,7 @@ export const blacksmithJohn: NpcDefinition = {
   knowledge: blacksmithKnowledge,
 
   locations: blacksmithLocations,
+  areas: blacksmithAreas,
 
   worldSetup: {
     // 시작 위치: 집에서 자는 상태
