@@ -164,7 +164,8 @@ export class NPCAgent {
       }
     } catch (error) {
       console.error('LLM 응답 생성 실패:', error);
-      responseText = '(잠시 생각에 잠긴다)... 뭐라고 했지?';
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      responseText = `(잠시 생각에 잠긴다)... 뭐라고 했지? (${errorMsg})`;
     }
 
     // 4. 감정 변화 처리

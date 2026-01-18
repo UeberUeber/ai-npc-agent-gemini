@@ -117,7 +117,8 @@ export class NPCAgent {
       response = await gemini.generate(prompt);
     } catch (error) {
       console.error('[NPCAgent] LLM 응답 생성 실패:', error);
-      response = '(잠시 생각에 잠긴다)... 뭐라고 했지?';
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      response = `(잠시 생각에 잠긴다)... 뭐라고 했지? (${errorMsg})`;
     }
 
     // 4. 대화 내용을 메모리에 저장
