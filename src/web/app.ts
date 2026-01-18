@@ -828,10 +828,23 @@ async function initChat() {
         userInput.disabled = false;
         userInput.placeholder = `${npcName}에게 답하기...`;
         userInput.focus();
+
+        // 3. 메모리 UI 업데이트 (자율 발화가 메모리에 저장되므로)
+        if (npcId === 'blacksmith_john') {
+          updateMemoryUI();
+        } else if (npcId === 'innkeeper_rosa') {
+          updateRosaMemoryUI();
+        }
       },
       // NPC간 대화 콜백
       onNpcConversation: (speakerId, speakerName, utterance) => {
         addMessage('npc', utterance, speakerName);
+        // 메모리 UI 업데이트
+        if (speakerId === 'blacksmith_john') {
+          updateMemoryUI();
+        } else if (speakerId === 'innkeeper_rosa') {
+          updateRosaMemoryUI();
+        }
       },
       // 다른 NPC Agent 가져오기
       getOtherNpcAgent: (npcId) => {

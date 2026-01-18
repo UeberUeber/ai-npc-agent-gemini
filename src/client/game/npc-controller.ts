@@ -53,6 +53,10 @@ export class NpcController {
   private static globalConversationCooldowns: Map<string, number> = new Map();  // "npcA_npcB" → timestamp
   private static NPC_CONVERSATION_COOLDOWN = 60000;  // 1분 쿨다운
 
+  // 플레이어 자율 발화 쿨다운 (인스턴스별)
+  private lastPlayerUtteranceTime: number = 0;
+  private static PLAYER_UTTERANCE_COOLDOWN = 30000;  // 30초 쿨다운
+
   /**
    * 두 NPC간 대화 키 생성 (정렬하여 양방향 동일 키)
    */
