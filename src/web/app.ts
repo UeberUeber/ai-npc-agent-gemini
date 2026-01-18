@@ -899,6 +899,10 @@ async function initChat() {
       getOtherNpcAgent: (npcId) => {
         return agents.get(npcId) || null;
       },
+      // 현재 게임 시간 (재플래닝용)
+      getCurrentTime: () => {
+        return gameTime.getTimeString();
+      },
     });
     controller.setupWorld();
     npcControllers.set(npcDef.id, controller);
