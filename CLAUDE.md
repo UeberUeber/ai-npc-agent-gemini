@@ -2,14 +2,6 @@
 
 Claude Code 가이드 파일입니다.
 
-## JD 요구사항 (✅ 전체 완료)
-
-1. ✅ 페르소나/환경/대화 히스토리/기억 통합
-2. ✅ 장단기 기억 저장 및 색인/추출 알고리즘 (Memory Stream + Retrieval)
-3. ✅ 심리/감정/의도 추론 기반 NPC 자율 발화
-4. ✅ Planning 시스템 (수면/기상 → 하루 계획 → 시간별 활동)
-5. ✅ Reflection 시스템 (대화 10회마다 인사이트 생성)
-
 ## 프로젝트 개요
 
 Stanford Generative Agents 논문(2023) 기반 RPG NPC 에이전트. Gemini API로 각 NPC가 고유한 페르소나, 감정, 기억 시스템을 가지고 대화한다.
