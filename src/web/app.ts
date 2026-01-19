@@ -750,17 +750,21 @@ function submitApiKey() {
   initChat();
 }
 
-// 모든 NPC 기상 (하루 시작)
+// 모든 NPC 기상 (하루 시작) - 병렬 처리로 초기화 시간 단축
 async function npcWakeUp(day: number) {
-  for (const [npcId, controller] of npcControllers.entries()) {
-    try {
-      await controller.wakeUp(day);
-      addLog(`${npcId} 기상 완료`, 'info');
-    } catch (error) {
-      console.error(`NPC ${npcId} 기상 오류:`, error);
-      addLog(`⚠️ ${npcId} 계획 생성 실패`, 'warning');
+  const wakeUpPromises = Array.from(npcControllers.entries()).map(
+    async ([npcId, controller]) => {
+      try {
+        await controller.wakeUp(day);
+        addLog(`${npcId} 기상 완료`, 'info');
+      } catch (error) {
+        console.error(`NPC ${npcId} 기상 오류:`, error);
+        addLog(`⚠️ ${npcId} 계획 생성 실패`, 'warning');
+      }
     }
-  }
+  );
+  await Promise.all(wakeUpPromises);
+
   updatePlanUI(day);
   updateRosaPlanUI(day);
   updateScratchUI();
@@ -769,16 +773,20 @@ async function npcWakeUp(day: number) {
   updateRosaMemoryUI();
 }
 
-// 모든 NPC 취침 (하루 종료)
+// 모든 NPC 취침 (하루 종료) - 병렬 처리
 async function npcSleep() {
-  for (const [npcId, controller] of npcControllers.entries()) {
-    try {
-      await controller.sleep();
-      addLog(`${npcId} 취침 완료`, 'info');
-    } catch (error) {
-      console.error(`NPC ${npcId} 취침 오류:`, error);
+  const sleepPromises = Array.from(npcControllers.entries()).map(
+    async ([npcId, controller]) => {
+      try {
+        await controller.sleep();
+        addLog(`${npcId} 취침 완료`, 'info');
+      } catch (error) {
+        console.error(`NPC ${npcId} 취침 오류:`, error);
+      }
     }
-  }
+  );
+  await Promise.all(sleepPromises);
+
   updatePlanUI();
   updateRosaPlanUI();
   updateScratchUI();
