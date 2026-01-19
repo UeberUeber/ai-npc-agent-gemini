@@ -520,7 +520,7 @@ endConversation() 시:
 
 - **Language**: TypeScript
 - **Build**: Vite
-- **AI**: Google Gemini API (`gemini-2.5-flash-preview-05-20`)
+- **AI**: Google Gemini API (`gemini-2.0-flash`)
 - **Storage**: localStorage (브라우저)
 
 ---
