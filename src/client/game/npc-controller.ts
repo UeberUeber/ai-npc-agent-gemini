@@ -195,7 +195,7 @@ export class NpcController {
     // 자는 중이면 깨움 (대화하려면 깨어있어야 함)
     const scratch = this.agent.getScratch();
     if (!scratch.isAwake) {
-      const currentTime = this.options.getCurrentTime?.() || '06:00';
+      const currentTime = this.options.getCurrentTime?.() || '06:15';
       this.log('☀️ 대화로 인해 기상!', 'info');
       await this.agent.wakeUp(currentTime);
     }

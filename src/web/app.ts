@@ -791,8 +791,8 @@ async function npcSleep() {
 function initGameTime() {
   gameTime = new GameTime({
     startDay: 1,
-    startHour: 6, // 새벽 6시 15분 시작
-    startMinute: 15,
+    startHour: 6, // 새벽 6시 시작
+    startMinute: 0,
     timeScale: 1, // 실시간 1초 = 게임 1분
     onTimeChange: (state) => {
       updateGameTimeUI(state);

@@ -7,7 +7,7 @@
 
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 
-const MODEL_NAME = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3-flash-preview';
+const MODEL_NAME = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20';
 const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
 export class GeminiClient {
