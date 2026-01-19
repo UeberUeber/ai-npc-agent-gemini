@@ -80,7 +80,7 @@ export const innkeeperLocations: Record<string, LocationDef> = {
   '여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
   '붉은 달 여관': { position: { x: 4, y: 9 }, facing: 'down', description: '여관 메인 홀', entrance: { x: 4, y: 11 } },
   '카운터': { position: { x: 4, y: 10 }, facing: 'up', description: '접수 카운터', entrance: { x: 4, y: 11 } },
-  '주방': { position: { x: 2, y: 8 }, facing: 'right', description: '주방 조리대 앞', entrance: { x: 4, y: 11 } },
+  '주방': { position: { x: 2, y: 9 }, facing: 'right', description: '주방 조리대 앞', entrance: { x: 4, y: 11 } },
   '식탁': { position: { x: 4, y: 9 }, facing: 'down', description: '손님 식탁 앞', entrance: { x: 4, y: 11 } },
 
   // 기타 (야외 장소는 entrance 없음)
