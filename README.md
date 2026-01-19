@@ -4,23 +4,16 @@ Stanford [Generative Agents (2023)](https://arxiv.org/abs/2304.03442) 논문을 
 
 ---
 
-## JD 요구사항 구현 매핑
+## 핵심 기능
 
-| JD 담당업무 | 구현 내용 | 핵심 코드 |
-|------------|----------|----------|
+| 개발요건 | 구현 내용 | 핵심 코드 |
+|----------|----------|----------|
 | **페르소나/환경/대화히스토리/기억 통합 발화 엔진** | Persona + Scratch + Memory Stream + Retrieval → LLM 프롬프트 조합 | `agent.ts:buildPrompt()` |
 | **장단기 기억 저장 및 색인/추출 알고리즘** | Recency × Importance × Relevance 스코어링 | `memory.ts:retrieve()` |
 | **심리/감정/의도 추론 기반 자율 발화** | Emotion System + Thought Memory + shouldContinueConversation() | `agent.ts:1230-1341` |
 | **NPC 자율 의사결정** | Planning (하루계획) + Reaction (반응 판단) + Replanning (재조정) | `agent.ts`, `npc-controller.ts` |
+| **RAG 기반 지능형 에이전트** | Memory Retrieval → Context Injection → LLM Generation | `memory.ts`, `agent.ts` |
 | **Prompt Engineering** | 기능별 프롬프트 설계 (대화/계획/반성/자율발화) | `agent.ts` 내 각 메서드 |
-
-### 자격요건 대응
-
-| 자격요건 | 구현 증거 |
-|---------|----------|
-| **RAG 기반 지능형 에이전트** | Memory Retrieval → Context Injection → LLM Generation |
-| **LLM 기반 대화 시스템 설계** | 전체 아키텍처 (Persona/Scratch/Memory/Planning 통합) |
-| **Prompt Engineering** | JSON 출력 형식, Few-shot 예시, 컨텍스트 구조화 |
 
 ---
 
