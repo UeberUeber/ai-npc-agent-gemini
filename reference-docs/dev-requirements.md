@@ -1,23 +1,19 @@
-# JD 핵심 요구사항 및 구현 매핑
+# 핵심 요구사항 및 구현 매핑
 
-## 담당업무
+## 개발요건
 
 1. **페르소나/환경/대화 히스토리/기억을 통합한 AI NPC 발화·행동 생성 엔진 개발**
 2. **게임 지식과 NPC 경험 기반 장·단기 기억 저장 및 색인·추출 알고리즘 연구**
 3. **심리/감정/의도 추론 기반 NPC 자율 발화 및 의사결정 모델 개발**
 4. **LLM 기반 NPC 대화 모델 Fine-tuning, Prompt Engineering, RLHF 적용을 통한 대화 성능 향상**
-
-## 자격요건
-
-- RAG 및 LLM 기반 지능형 에이전트/대화 시스템 설계 및 개발 경험
-- 언어모델 Fine-tuning, Prompt Engineering, RLHF 등 최신 기법을 활용한 모델 커스터마이징 및 성능 최적화 경험
-- AI 시스템 아키텍처 설계 및 대화형 인터페이스 구현 경험
+5. **RAG 및 LLM 기반 지능형 에이전트/대화 시스템 설계 및 개발**
+6. **AI 시스템 아키텍처 설계 및 대화형 인터페이스 구현**
 
 ---
 
 ## 구현 매핑 (Generative Agents 기반)
 
-| JD 요구사항 | 구현 컴포넌트 | 파일/모듈 |
+| 개발요건 | 구현 컴포넌트 | 파일/모듈 |
 |------------|--------------|----------|
 | 페르소나/환경/대화히스토리/기억 통합 | Persona + Memory Stream + Retrieval | `persona.json` + `memories.jsonl` + `MemoryStore` |
 | 장단기 기억 저장 및 색인/추출 | Memory Stream + Retrieval 스코어링 (Recency × Importance × Relevance) | `src/lib/memory/store.ts` |

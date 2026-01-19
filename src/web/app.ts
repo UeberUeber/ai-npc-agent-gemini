@@ -274,7 +274,7 @@ function updateHistoryUI() {
     .map(
       (msg) => `
       <div class="memory-item">
-        <div class="type">${msg.speaker === 'user' ? '용사 스마게' : agent.getName()}</div>
+        <div class="type">${msg.speaker === 'user' ? '용사 김이박' : agent.getName()}</div>
         <div>${msg.content}</div>
       </div>
     `
@@ -427,7 +427,7 @@ function updateRosaHistoryUI() {
     .map(
       (msg) => `
       <div class="memory-item">
-        <div class="type">${msg.speaker === 'user' ? '용사 스마게' : rosaAgent.getName()}</div>
+        <div class="type">${msg.speaker === 'user' ? '용사 김이박' : rosaAgent.getName()}</div>
         <div>${msg.content}</div>
       </div>
     `
@@ -561,7 +561,7 @@ function updateTileInfoUI(tileInfo: TileInfo) {
   `;
 
   if (tileInfo.isPlayerHere) {
-    content += `<div class="tile-info-item player">🦸 용사 스마게</div>`;
+    content += `<div class="tile-info-item player">🦸 용사 김이박</div>`;
   }
 
   if (tileInfo.npc) {
@@ -640,7 +640,7 @@ async function sendMessage() {
     await controller.startConversation();
   }
 
-  addMessage('user', message, '용사 스마게');
+  addMessage('user', message, '용사 김이박');
   showTypingIndicator(currentNpcId || undefined);
 
   try {

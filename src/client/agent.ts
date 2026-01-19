@@ -98,7 +98,7 @@ export class NPCAgent {
   }
 
   /**
-   * 용사 스마게이 들어왔을 때 첫 인사
+   * 용사 김이박이 들어왔을 때 첫 인사
    */
   async greet(): Promise<string> {
     const p = this.persona;
@@ -117,7 +117,7 @@ export class NPCAgent {
 기분: ${s.currentMood}
 
 ## 상황
-용사 스마게이 당신의 가게에 막 들어왔습니다. 하던 일을 하면서 용사 스마게에게 첫 인사를 건네세요.
+용사 김이박이 당신의 가게에 막 들어왔습니다. 하던 일을 하면서 용사 김이박에게 첫 인사를 건네세요.
 
 ## 응답 지침
 - 1-2문장으로 짧게
@@ -188,19 +188,19 @@ export class NPCAgent {
 
     this.memoryStore.add({
       type: 'observation',
-      content: `용사 스마게이 말했다: "${userMessage}"`,
+      content: `용사 김이박이 말했다: "${userMessage}"`,
     });
 
     this.memoryStore.add({
       type: 'observation',
-      content: `나는 용사 스마게에게 말했다: "${responseText}"${intent ? ` (의도: ${intent})` : ''}`,
+      content: `나는 용사 김이박에게 말했다: "${responseText}"${intent ? ` (의도: ${intent})` : ''}`,
     });
 
     // 6. 플레이어에 대한 관찰이 있으면 저장
     if (playerObservation) {
       this.memoryStore.add({
         type: 'observation',
-        content: `[용사 스마게에 대한 관찰] ${playerObservation}`,
+        content: `[용사 김이박에 대한 관찰] ${playerObservation}`,
       });
       this.log(`👁️ 관찰: ${playerObservation}`, 'info');
     }
@@ -356,11 +356,11 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 
 위 기억들을 바탕으로:
 1. 어떤 패턴이나 깨달음이 있는지
-2. 용사 스마게에 대해 어떤 인상을 받았는지
+2. 용사 김이박에 대해 어떤 인상을 받았는지
 3. 앞으로 어떻게 해야 할지
 
 대장장이 존의 관점에서 1-2문장의 짧은 성찰을 작성하세요.
-예시: "최근 용사 스마게들이 철광석에 대해 자주 물어보는군. 수급 문제를 해결해야겠어."
+예시: "최근 용사 김이박들이 철광석에 대해 자주 물어보는군. 수급 문제를 해결해야겠어."
 
 성찰 내용만 출력:`;
 
@@ -437,14 +437,14 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
     const recent = this.conversationHistory.slice(-6);
     if (recent.length > 0) {
       history += recent
-        .map((msg) => `${msg.speaker === 'user' ? '용사 스마게' : p.name}: ${msg.content}`)
+        .map((msg) => `${msg.speaker === 'user' ? '용사 김이박' : p.name}: ${msg.content}`)
         .join('\n');
     } else {
-      history += '(이전 대화 없음 - 용사 스마게이 방금 들어왔다)';
+      history += '(이전 대화 없음 - 용사 김이박이 방금 들어왔다)';
     }
 
     // 5. 현재 발화
-    const current = `## 용사 스마게의 말\n"${userMessage}"`;
+    const current = `## 용사 김이박의 말\n"${userMessage}"`;
 
     // 6. 응답 지침 (JSON 형식 요청)
     // NPC가 먼저 말 건 경우 "바쁘다"고 거부하면 안 됨
@@ -472,8 +472,8 @@ ${topMemories.map((m) => `- ${m.content} (중요도: ${m.importance})`).join('\n
 - response: 대화 내용 (행동 묘사나 따옴표 없이)
 - mood: 대화 후 당신의 감정 (happy/neutral/sad/angry/fearful/excited/curious 중 하나)
 - intent: 이 대화에서 당신의 의도 (sell/help/refuse/inquire/share_story/warn/chat 중 하나)
-- playerObservation: 이 대화에서 용사 스마게에 대해 새로 알게 된 것이 있다면 1문장으로 작성. 없으면 null
-  예: "용사 스마게는 기사단 출신이라고 한다", "이 용사는 검에 관심이 많은 것 같다", "허세가 있지만 나쁜 녀석은 아닌 듯"
+- playerObservation: 이 대화에서 용사 김이박에 대해 새로 알게 된 것이 있다면 1문장으로 작성. 없으면 null
+  예: "용사 김이박는 기사단 출신이라고 한다", "이 용사는 검에 관심이 많은 것 같다", "허세가 있지만 나쁜 녀석은 아닌 듯"
 
 JSON만 출력:`;
 
