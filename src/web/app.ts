@@ -980,8 +980,14 @@ async function initChat() {
   addLog('NPC Agent 초기화 완료', 'success');
   addLog(`${NPC_DEFINITIONS.length}명의 NPC 로드됨`, 'info');
 
+  // 로딩 메시지 표시
+  addMessage('system', 'NPC 계획 생성 중... 잠시만 기다려주세요.', '로딩');
+
   // 모든 NPC 기상 및 하루 계획 생성 (게임 시작 = 06:15)
   await npcWakeUp(gameTime.getState().day);
+
+  // 로딩 메시지 제거하고 완료 메시지 표시
+  chatMessages.innerHTML = '';
 
   // NPC 초기화 완료 후 게임 시간 시작
   gameTime.start();

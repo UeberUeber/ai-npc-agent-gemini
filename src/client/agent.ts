@@ -641,13 +641,7 @@ ${p.backstory}`;
       this.scratch.currentLocation = plan[0].location || this.scratch.currentLocation;
     }
 
-    // 기상을 메모리에 기록
-    this.memoryStore.add({
-      type: 'observation',
-      content: `아침 ${currentTime}에 일어났다. 오늘 할 일: ${plan.slice(0, 3).map(p => p.activity).join(', ')}...`,
-      importance: 3,
-    });
-
+    // 기상 기록은 plan 타입 메모리로 generateDailyPlan()에서 저장됨
     this.log(`📋 ${plan.length}개의 일정 생성됨`, 'success');
     return plan;
   }
