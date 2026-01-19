@@ -52,7 +52,7 @@ score = α_recency × recency + α_importance × importance + α_relevance × re
 
 ---
 
-## 면접 시연 포인트
+## 시연 포인트
 
 1. **RAG 구현**: 메모리 검색 알고리즘 (Recency/Importance/Relevance 스코어링)
 2. **프롬프트 엔지니어링**: 각 기능별 프롬프트 설계 및 최적화
