@@ -843,9 +843,8 @@ function initGameTime() {
   // 초기 UI 업데이트
   updateGameTimeUI(gameTime.getState());
 
-  // 시간 흐름 시작
-  gameTime.start();
-  addLog('게임 시간 시작 (1초 = 1분)', 'info');
+  // 시간 흐름은 NPC 초기화 완료 후 시작 (initChat에서 처리)
+  addLog('게임 시간 준비 완료 (NPC 로드 후 시작)', 'info');
 
   // 시간 일시정지 버튼
   const timeToggleBtn = document.getElementById('timeToggleBtn') as HTMLButtonElement;
@@ -983,6 +982,10 @@ async function initChat() {
 
   // 모든 NPC 기상 및 하루 계획 생성 (게임 시작 = 06:15)
   await npcWakeUp(gameTime.getState().day);
+
+  // NPC 초기화 완료 후 게임 시간 시작
+  gameTime.start();
+  addLog('게임 시간 시작 (1초 = 1분)', 'info');
 
   // 안내 메시지
   addMessage('system', 'NPC 근처로 이동하면 대화할 수 있습니다. (WASD/방향키)', '시스템');

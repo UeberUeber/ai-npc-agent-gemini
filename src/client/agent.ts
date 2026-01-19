@@ -1012,7 +1012,7 @@ JSON 배열만 출력:
       }
     }
 
-    // 마지막 계획 시간을 지났으면 마지막 계획 유지
+    // targetIndex가 -1인 경우 처리 (계획 사이 갭 또는 모든 계획 완료)
     if (targetIndex === -1 && plan.length > 0) {
       const lastPlan = plan[plan.length - 1];
       const lastEndMinutes = this.timeToMinutes(lastPlan.time) + lastPlan.duration;
@@ -1020,6 +1020,9 @@ JSON 배열만 출력:
         // 모든 계획 완료
         return { changed: false };
       }
+      // 계획 사이 갭인 경우: 현재 계획 유지 (이동 중단 방지)
+      this.scratch.currentTime = currentTime;
+      return { changed: false };
     }
 
     const currentIndex = this.scratch.currentPlanIndex ?? 0;

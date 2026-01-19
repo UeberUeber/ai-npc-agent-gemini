@@ -526,11 +526,18 @@ export class NpcController {
       // 하루 계획 생성
       const plan = await this.agent.wakeUp('06:15');
 
-      // 첫 번째 계획 장소로 이동
+      // 첫 번째 계획 장소로 이동 (현재 위치와 다를 경우만)
       if (plan.length > 0 && plan[0].location) {
-        this.moveTo(plan[0].location, () => {
-          this.log(`📍 ${plan[0].location} 도착, ${plan[0].activity}`, 'info');
-        });
+        const currentLoc = this.agent.getScratch().currentLocation;
+        if (plan[0].location !== currentLoc && plan[0].location !== '집') {
+          this.moveTo(plan[0].location, () => {
+            this.log(`📍 ${plan[0].location} 도착, ${plan[0].activity}`, 'info');
+          });
+        } else {
+          this.setState('working');
+        }
+      } else {
+        this.setState('working');
       }
 
       this.log(`📋 ${day}일차: ${plan.length}개 일정 생성`, 'success');
