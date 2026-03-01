@@ -4,6 +4,14 @@ Stanford [Generative Agents (2023)](https://arxiv.org/abs/2304.03442) 논문을 
 
 ---
 
+## 스크린샷
+
+![게임 초기 화면 - Persona, Scratch, Planning](screenshot1.png)
+![Planning, 대화 히스토리, 메모리 스트림](screenshot2.png)
+![NPC 대화 진행](screenshot3.png)
+
+---
+
 ## 핵심 기능
 
 | 개발요건 | 구현 내용 | 핵심 코드 |
